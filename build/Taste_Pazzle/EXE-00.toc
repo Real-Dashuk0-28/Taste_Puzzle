@@ -70,7 +70,7 @@
  [],
  False,
  False,
- 1764684011,
+ 1765022449,
  [('runw.exe',
    'C:\\Users\\Panda\\PycharmProjects\\Taste_Puzzle\\.venv\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\runw.exe',
    'EXECUTABLE')],
