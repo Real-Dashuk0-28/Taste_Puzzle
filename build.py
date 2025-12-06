@@ -1,162 +1,165 @@
+"""
+Скрипт для сборки Taste Puzzle в один исполняемый файл
+"""
+
 import os
+import sys
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
+def build_project():
+    """Собирает проект в один исполняемый файл"""
 
-def build_exe():
-    """Собирает проект в EXE файл с иконкой"""
-
-    # Пути
+    # Пути к файлам
     project_root = Path(__file__).parent
-    src_dir = project_root / 'src'
-    data_dir = project_root / 'data'
-    img_dir = project_root / 'img'
-    build_dir = project_root / 'build'
-    dist_dir = project_root / 'dist'
+    src_dir = project_root / "src"
+    img_dir = project_root / "img"
+    data_dir = project_root / "data"
 
-    print("=== Начало сборки проекта ===")
-    print(f"Корневая папка: {project_root}")
-    print(f"Папка данных: {data_dir}")
+    print(f"Корневая директория: {project_root}")
+    print(f"Директория исходного кода: {src_dir}")
 
-    # Проверка существования файлов
-    db_files = list(data_dir.glob('*.db'))
-    print(f"Найдены файлы БД: {[f.name for f in db_files]}")
+    # Проверяем существование основных файлов
+    if not (src_dir / "main.py").exists():
+        print("Ошибка: не найден main.py в папке src/")
+        return False
 
-    # Проверка наличия иконки
-    icon_path = img_dir / 'ico2.ico'
-    if not icon_path.exists():
-        print(f"ПРЕДУПРЕЖДЕНИЕ: Иконка не найдена: {icon_path}")
-        # Попробуем найти другую иконку
-        icon_files = list(img_dir.glob('*.ico'))
-        if icon_files:
-            icon_path = icon_files[0]
-            print(f"Используем иконку: {icon_path}")
-        else:
-            print("Иконка не найдена, сборка продолжится без иконки")
-            icon_path = None
+    if not img_dir.exists():
+        print("Ошибка: не найдена папка img/")
+        return False
 
-    # Очистка предыдущих сборок
-    for dir_path in [build_dir, dist_dir]:
-        if dir_path.exists():
-            shutil.rmtree(dir_path)
-            print(f"Очищена папка: {dir_path}")
+    # Проверяем наличие иконок
+    if not (img_dir / "icon.ico").exists():
+        print("Предупреждение: не найдена иконка icon.ico для окон приложения")
 
-    # Создаем список данных для включения
-    datas_args = []
+    if not (img_dir / "ico2.ico").exists():
+        print("Предупреждение: не найдена иконка ico2.ico для exe-файла")
 
-    # Добавляем файлы базы данных (только существующие)
-    for db_file in data_dir.glob('*.db'):
-        if db_file.exists():
-            datas_args.extend(['--add-data', f'{db_file};data'])
-            print(f"Добавлен файл БД: {db_file.name}")
+    # Создаем папку для сборки
+    build_dir = project_root / "build"
+    dist_dir = project_root / "dist"
 
-    # Добавляем изображения
-    for img_file in img_dir.glob('*.*'):
-        if img_file.suffix.lower() in ['.png', '.ico', '.jpg', '.jpeg', '.bmp']:
-            datas_args.extend(['--add-data', f'{img_file};img'])
+    # Удаляем старые сборки
+    for folder in [build_dir, dist_dir]:
+        if folder.exists():
+            print(f"Удаляем старую папку: {folder}")
+            shutil.rmtree(folder)
 
-    # Добавляем изображения рецептов
-    recipe_img_dir = img_dir / 'recipe_img'
-    if recipe_img_dir.exists():
-        for recipe_img in recipe_img_dir.glob('*.*'):
-            if recipe_img.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
-                datas_args.extend(['--add-data', f'{recipe_img};img/recipe_img'])
+    datas = [
+        ('img/*.png', 'img'),
+        ('img/*.ico', 'img'),
+        ('img/*.jpg', 'img'),
+        ('img/recipe_img/*', 'img/recipe_img'),
+        ('data/*', 'data')
+    ],
 
-    # Базовые аргументы PyInstaller
+    # Команда сборки с оптимизацией
     cmd = [
-        sys.executable, '-m', 'PyInstaller',
-        '--clean',
-        '--noconfirm',
-        '--name', 'Taste_Pazzle',
-        '--windowed',  # Для GUI приложения (без консоли)
+        sys.executable, "-m", "PyInstaller",
+        "--onefile",
+        "--windowed",
+        "--noconsole",
+        f"--icon={img_dir / 'ico2.ico'}",
+        "--name=TastePuzzle",
+        # Основные ресурсы
+        f"--add-data={img_dir / '*'};img",
+        # Рекурсивно добавляем папку recipe_img
+        f"--add-data={img_dir / 'recipe_img'};img/recipe_img",
+        # Модули для избежания циклических импортов
+        "--hidden-import=modules.recipe_dialog",
+        "--hidden-import=modules.settings_dialog",
+        "--hidden-import=modules.help_dialog",
+        "--hidden-import=modules.add_ingredient_dialog",
+        # Библиотеки
+        "--hidden-import=sqlalchemy",
+        "--hidden-import=sqlalchemy.orm",
+        "--hidden-import=sqlalchemy.ext.declarative",
+        "--hidden-import=PIL",
+        "--hidden-import=PIL.Image",
+        "--hidden-import=PIL.ImageDraw",
+        # PyQt6 модули
+        "--hidden-import=PyQt6",
+        "--hidden-import=PyQt6.QtCore",
+        "--hidden-import=PyQt6.QtGui",
+        "--hidden-import=PyQt6.QtWidgets",
+        # Другие зависимости
+        "--hidden-import=logging",
+        "--hidden-import=base64",
+        "--hidden-import=io",
+        # Оптимизация
+        "--clean",
+        "--exclude-module=matplotlib",
+        "--exclude-module=numpy",
+        "--exclude-module=pandas",
+        "--exclude-module=scipy",
+        "--exclude-module=tkinter",
+        str(src_dir / "main.py")
     ]
 
-    # Добавляем иконку если она существует
-    if icon_path and icon_path.exists():
-        cmd.extend(['--icon', str(icon_path)])
-        print(f"Используется иконка: {icon_path}")
+    print(f"Команда сборки: {' '.join(cmd)}")
 
-    # Добавляем данные
-    cmd.extend(datas_args)
+    # Запускаем сборку
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
 
-    # Добавляем скрытые импорты
-    hidden_imports = [
-        'sqlalchemy.ext.declarative',
-        'sqlalchemy.orm',
-        'sqlalchemy.sql',
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
-        'PIL',
-        'PIL.Image',
-        'PIL.ImageDraw',
-    ]
+        if result.returncode == 0:
+            print("\n✅ Сборка успешно завершена!")
+            print(f"Исполняемый файл: {dist_dir / 'TastePuzzle.exe'}")
 
-    for imp in hidden_imports:
-        cmd.extend(['--hidden-import', imp])
+            # Создаем папку data рядом с исполняемым файлом
+            data_target_dir = dist_dir / "data"
+            data_target_dir.mkdir(parents=True, exist_ok=True)
 
-    # Добавляем основной файл
-    cmd.append(str(src_dir / 'main.py'))
+            # Копируем существующую базу данных, если есть
+            if data_dir.exists():
+                for db_file in data_dir.glob("*.db"):
+                    shutil.copy2(db_file, data_target_dir)
+                    print(f"Скопирована база данных: {db_file.name}")
+            else:
+                print("База данных не найдена, будет создана при первом запуске")
 
-    print(f"\nКоманда сборки:")
-    print(' '.join(cmd))
+            # Создаем README файл
+            readme_content = """Taste Puzzle - Менеджер рецептов
 
-    # Запускаем PyInstaller
-    print("\nЗапуск PyInstaller...")
-    result = subprocess.run(cmd, cwd=project_root)
+Просто запустите TastePuzzle.exe
 
-    if result.returncode == 0:
-        print("=== Сборка успешно завершена ===")
+При первом запуске будет создана база данных в папке data/
 
-        # Создаем папку с распространяемым пакетом
-        package_dir = project_root / 'Taste_Pazzle_Package'
-        if package_dir.exists():
-            shutil.rmtree(package_dir)
-        package_dir.mkdir()
+Для выхода из программы используйте кнопку "Выйти из аккаунта" в профиле.
 
-        # Копируем EXE файл
-        exe_source = dist_dir / 'Taste_Pazzle.exe'
-        if exe_source.exists():
-            shutil.copy2(exe_source, package_dir / 'Taste_Pazzle.exe')
-            print(f"Скопирован EXE файл")
+Версия: 1.0
+"""
 
-        # Создаем подпапки
-        (package_dir / 'data').mkdir()
-        (package_dir / 'img').mkdir()
-        (package_dir / 'img' / 'recipe_img').mkdir(parents=True)
+            with open(dist_dir / "README.txt", "w", encoding="utf-8") as f:
+                f.write(readme_content)
 
-        # Копируем базу данных
-        for db_file in data_dir.glob('*.db'):
-            if db_file.exists():
-                shutil.copy2(db_file, package_dir / 'data' / db_file.name)
-                print(f"Скопирован: data/{db_file.name}")
+            print("\n📦 Готово! Ваше приложение собрано в один файл.")
+            print(f"Путь к исполняемому файлу: {dist_dir / 'TastePuzzle.exe'}")
 
-        # Копируем изображения
-        for img_file in img_dir.glob('*.*'):
-            if img_file.suffix.lower() in ['.png', '.ico', '.jpg', '.jpeg']:
-                shutil.copy2(img_file, package_dir / 'img' / img_file.name)
-                print(f"Скопирован: img/{img_file.name}")
+            # Открываем папку с результатом
+            if sys.platform == "win32":
+                os.startfile(dist_dir)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", dist_dir])
+            else:
+                subprocess.run(["xdg-open", dist_dir])
 
-        # Копируем изображения рецептов
-        if recipe_img_dir.exists():
-            for recipe_img in recipe_img_dir.glob('*.*'):
-                shutil.copy2(recipe_img, package_dir / 'img' / 'recipe_img' / recipe_img.name)
-                print(f"Скопирован: img/recipe_img/{recipe_img.name}")
+            return True
 
-        # Копируем README.md если есть
-        if (project_root / 'README.md').exists():
-            shutil.copy2(project_root / 'README.md', package_dir / 'README.md')
+        else:
+            print(f"\n❌ Ошибка сборки (код {result.returncode}):")
+            if result.stdout:
+                print(f"STDOUT:\n{result.stdout}")
+            if result.stderr:
+                print(f"STDERR:\n{result.stderr}")
+            return False
 
-        print(f"\n=== Сборка завершена ===")
-        print(f"Распространяемый пакет создан в: {package_dir}")
-        print(f"Запускаемый файл: {package_dir / 'Taste_Pazzle.exe'}")
-
-    else:
-        print("Ошибка при сборке!")
-        print(f"Код возврата: {result.returncode}")
-
+    except Exception as e:
+        print(f"\n❌ Исключение при сборке: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return False
 
 if __name__ == "__main__":
-    build_exe()
+    build_project()

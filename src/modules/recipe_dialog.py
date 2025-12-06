@@ -1,4 +1,6 @@
 import os
+import sys
+import logging
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLineEdit, QTextEdit, QSpinBox, QComboBox, QLabel,
                              QMessageBox, QFormLayout, QDialog, QListWidget,
@@ -8,14 +10,45 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QImage, QIcon
 import base64
-import io
 from PIL import Image, ImageDraw
+from PyQt6.uic.properties import QtGui
 
-import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+logger = logging.getLogger(__name__)
+
+
+def resource_path(relative_path):
+    """Получает корректный путь к ресурсам в режиме exe и разработки"""
+    try:
+        # PyInstaller создает временную папку _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Режим разработки
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        # Поднимаемся на уровень выше (из src в корень проекта)
+        base_path = os.path.dirname(base_path)
+
+    # Строим полный путь
+    path = os.path.join(base_path, relative_path)
+
+    # Проверяем наличие файла
+    if os.path.exists(path):
+        return path
+
+    # Если не найден, пробуем альтернативные пути
+    alternative_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path),
+        os.path.join(os.getcwd(), relative_path),
+        relative_path,
+    ]
+
+    for alt_path in alternative_paths:
+        if os.path.exists(alt_path):
+            return alt_path
+
+    # Если файл не найден нигде
+    logger.warning(f"Ресурс не найден: {relative_path}")
+    return None
 
 
 class RecipeDialog(QDialog):
@@ -83,10 +116,15 @@ class RecipeDialog(QDialog):
         layout = QVBoxLayout()  # Создание вертикального компоновщика
 
         # НАСТРОЙКА ИКОНКИ ОКНА
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(os.path.dirname(current_dir), '..', 'img', 'icon.ico')
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        self.setWindowIcon(QtGui.QIcon(resource_path("img/icon.ico")))
+        # if icon_path and os.path.exists(icon_path):
+        #     self.setWindowIcon(QIcon(icon_path))
+        # else:
+        #     # Используем относительный путь как fallback
+        #     current_dir = os.path.dirname(os.path.abspath(__file__))
+        #     icon_path = os.path.join(os.path.dirname(current_dir), '..', 'img', 'icon.ico')
+        #     if os.path.exists(icon_path):
+        #         self.setWindowIcon(QIcon(icon_path))
 
         # УСТАНОВКА СТИЛЕЙ ДЛЯ ДИАЛОГА
         self.setStyleSheet("""
@@ -173,7 +211,7 @@ class RecipeDialog(QDialog):
         # ВЫПАДАЮЩИЙ СПИСОК КУХНИ (cuisine)
         self.cuisine_combo = QComboBox()
         self.cuisine_combo.addItem("Не выбрана", None)
-        cuisines = self.db.get_cuisines()  # Прямой вызов метода
+        cuisines = self.db.get_cuisines()
         for cat_id, cat_name in cuisines:
             self.cuisine_combo.addItem(cat_name, cat_id)
 
@@ -199,7 +237,7 @@ class RecipeDialog(QDialog):
         image_layout.addWidget(self.image_label)
         image_layout.addWidget(load_image_btn)
 
-        # ДОБАВЛЕНИЕ ЭЛЕМЕНТОВ В ФОРМУ (ИЗМЕНЕНЫ НАЗВАНИЯ ПОЛЕЙ)
+        # ДОБАВЛЕНИЕ ЭЛЕМЕНТОВ В ФОРМУ
         form_layout.addRow('Название:', self.name_input)
         form_layout.addRow('Описание:', self.description_input)
         form_layout.addRow('Кухня:', self.cuisine_combo)
@@ -402,8 +440,8 @@ class RecipeDialog(QDialog):
 
             self.cook_time_input.setValue(self.recipe_data[8] or 30)
 
-            # === ЗАГРУЗКА КУХНИ (cuisine) ===
-            # recipe_data[17] - это название кухни, но нам нужно ID
+            # === ЗАГРУЗКА КУХНИ ===
+            # recipe_data[17] - это название кухни
             if len(self.recipe_data) > 17 and self.recipe_data[17]:
                 # Получаем ID кухни по названию
                 cuisine_id = self.db.get_cuisine_by_name(self.recipe_data[17])
@@ -418,7 +456,7 @@ class RecipeDialog(QDialog):
             else:
                 self.cuisine_combo.setCurrentIndex(0)
 
-            # === ЗАГРУЗКА ТИПА БЛЮДА (dish_type) ===
+            # === ЗАГРУЗКА ТИПА БЛЮДА ===
             # recipe_data[5] - это dish_type_id
             if self.recipe_data[5]:
                 dish_type_index = self.dish_type_combo.findData(self.recipe_data[5])
@@ -688,7 +726,7 @@ class RecipeCardDialog(QDialog):
         first_block_layout = QHBoxLayout()
         first_block_layout.setSpacing(20)
 
-        # Фотография (слева) - занимает 40% ширины
+        # Фотография (слева)
         image_container = QVBoxLayout()
         image_label = QLabel()
         image_label.setFixedSize(220, 180)  # Уменьшаем немного для баланса
@@ -715,7 +753,7 @@ class RecipeCardDialog(QDialog):
         image_container.addWidget(image_label)
         image_container.addStretch()
 
-        # Информация справа (кухня, категория и время) - занимает 60% ширины
+        # Информация справа (кухня, категория и время)
         info_container = QVBoxLayout()
         info_container.setSpacing(15)
 

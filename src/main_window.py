@@ -8,50 +8,61 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QAbstractItemView, QDialog, QSpacerItem, QSizePolicy, QLayout, QCompleter)
 from PyQt6.QtCore import Qt, pyqtSignal, QSettings, QSize, QTimer, QRect, QPoint, QStringListModel
 from PyQt6.QtGui import QPixmap, QAction, QIcon, QColor
+from PyQt6.uic.properties import QtGui
 
 from src.database import Recipe
 
 # Настройка логирования для отслеживания событий приложения
 logger = logging.getLogger(__name__)
 
-from modules.recipe_dialog import RecipeDialog, RecipeCardDialog
-from modules.settings_dialog import SettingsDialog
-from modules.help_dialog import HelpDialog
-from modules.add_ingredient_dialog import AddIngredientDialog
+from src.modules.recipe_dialog import RecipeDialog, RecipeCardDialog
+from src.modules.settings_dialog import SettingsDialog
+from src.modules.help_dialog import HelpDialog
+from src.modules.add_ingredient_dialog import AddIngredientDialog
 
 import sys
 import os
 
 
 def resource_path(relative_path):
-    """Получение абсолютного пути к ресурсу для работы в PyInstaller."""
+    """Получает корректный путь к ресурсам в режиме exe и разработки"""
     try:
-        # PyInstaller создает временную папку в _MEIPASS
+        # PyInstaller создает временную папку _MEIPASS
         base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
+    except AttributeError:
+        try:
+            # Альтернативный способ определения пути в PyInstaller
+            base_path = os.path.join(sys._MEIPASS2, relative_path)
+            if os.path.exists(base_path):
+                return base_path
+        except:
+            # Режим разработки
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            # Поднимаемся на уровень выше (из src в корень проекта)
+            base_path = os.path.dirname(base_path)
 
+    # Строим полный путь
     path = os.path.join(base_path, relative_path)
 
     # Проверяем наличие файла
     if os.path.exists(path):
         return path
 
-    # Если не найден в _MEIPASS, ищем в других местах
-    possible_paths = [
+    # Если не найден, пробуем альтернативные пути
+    alternative_paths = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path),
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path),
+        os.path.join(os.getcwd(), relative_path),
         relative_path,
     ]
 
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
+    for alt_path in alternative_paths:
+        if os.path.exists(alt_path):
+            return alt_path
 
     # Если файл не найден нигде
     logger.warning(f"Ресурс не найден: {relative_path}")
     return None
-
 
 class SmartSearchLineEdit(QLineEdit):
     """Умное поле поиска с подсказками"""
@@ -68,7 +79,7 @@ class SmartSearchLineEdit(QLineEdit):
         self.setCompleter(self.completer)
 
         # Ищем иконку поиска
-        icon_path = resource_path("img/search_icon.png")
+        icon_path = resource_path("../img/search_icon.png")
 
         # Добавляем иконку поиска
         self.search_icon = QLabel()
@@ -150,11 +161,11 @@ class FlowLayout(QLayout):
 
     def expandingDirections(self):
         """Определяет направления расширения layout (в данном случае не расширяется)."""
-        return Qt.Orientation(0)  # Layout не расширяется ни по горизонтали, ни по вертикали
+        return Qt.Orientation(0)
 
     def hasHeightForWidth(self):
         """Возвращает True, так как высота layout зависит от его ширины."""
-        return True  # Для flow layout высота зависит от ширины
+        return True
 
     def heightForWidth(self, width):
         """Вычисляет необходимую высоту layout для заданной ширины."""
@@ -163,17 +174,17 @@ class FlowLayout(QLayout):
     def setGeometry(self, rect):
         """Устанавливает геометрию layout и размещает в нем элементы."""
         super().setGeometry(rect)  # Вызов родительского метода
-        self._do_layout(rect, test_only=False)  # Фактическое размещение элементов
+        self._do_layout(rect, test_only=False)
 
     def sizeHint(self):
         """Возвращает рекомендуемый размер layout."""
-        return self.minimumSize()  # Используем минимальный размер как рекомендуемый
+        return self.minimumSize()
 
     def minimumSize(self):
         """Вычисляет минимальный размер layout."""
         size = QSize()  # Создаем объект размера
         for item in self._items:
-            size = size.expandedTo(item.minimumSize())  # Находим максимальный размер элементов
+            size = size.expandedTo(item.minimumSize())
 
         # Добавляем отступы к размеру
         margins = self.contentsMargins()
@@ -236,10 +247,6 @@ class CartItemWidget(QWidget):
     """Виджет для отображения элемента корзины с возможностью выбора чекбоксом."""
 
     def __init__(self, ingredient_name, quantity, unit, parent=None):
-        """
-        Инициализация виджета элемента корзины.
-        parent: Родительский виджет
-        """
         super().__init__(parent)
         self.ingredient_name = ingredient_name  # Сохраняем название ингредиента
         self.quantity = quantity  # Сохраняем количество
@@ -833,14 +840,13 @@ class MainWindow(QMainWindow):
         """Инициализация пользовательского интерфейса главного окна."""
         self.setWindowTitle("Пазл Вкусов")
         self.setGeometry(100, 100, 1200, 850)
-
-        # Устанавливаем иконку главного окна
-        icon_path = resource_path("img/icon.ico")
-        if icon_path and os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-        else:
-            # Используем текстовую иконку если файл не найден
-            logger.warning("Иконка главного окна не найдена")
+        self.setWindowIcon(QIcon(resource_path("img/icon.ico")))
+        # # Устанавливаем иконку главного окна
+        # icon_path = resource_path("../img/icon.ico")  # Изменено на ico2.ico
+        # if icon_path and os.path.exists(icon_path):
+        #     self.setWindowIcon(QIcon(icon_path))
+        # else:
+        #     logger.warning("Иконка главного окна не найдена: icon.ico")
 
         # Загружаем настройки шрифтов
         font_size = self.settings.value("font_size", 14, type=int)
@@ -1729,8 +1735,6 @@ class MainWindow(QMainWindow):
             self.show_no_recipes_message()
             return
 
-        # ВАЖНО: Определяем порядок категорий для приоритетного отображения
-        # Но также показываем и другие категории в конце
         priority_categories = [
             "Салаты",
             "Десерты",
@@ -1738,7 +1742,7 @@ class MainWindow(QMainWindow):
             "Завтраки",
             "Гарниры",
             "Супы",
-            "Закуски",  # Добавляем закуски в приоритетные
+            "Закуски",
             "Напитки",
             "Соусы"
         ]

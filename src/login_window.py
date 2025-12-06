@@ -1,34 +1,51 @@
 import os
 import sys
-
+import logging
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton,
                              QLineEdit, QLabel, QMessageBox, QTabWidget, QCheckBox)
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QIcon
+logger = logging.getLogger(__name__)
 
 
 def resource_path(relative_path):
-    """Получение абсолютного пути к ресурсу для работы в PyInstaller."""
+    """Получает корректный путь к ресурсам в режиме exe и разработки"""
     try:
+        # PyInstaller создает временную папку _MEIPASS
         base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
+    except AttributeError:
+        try:
+            # Альтернативный способ определения пути в PyInstaller
+            base_path = os.path.join(sys._MEIPASS2, relative_path)
+            if os.path.exists(base_path):
+                return base_path
+        except:
+            # Режим разработки
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            # Поднимаемся на уровень выше (из src в корень проекта)
+            base_path = os.path.dirname(base_path)
 
+    # Строим полный путь
     path = os.path.join(base_path, relative_path)
 
+    # Проверяем наличие файла
     if os.path.exists(path):
         return path
 
-    possible_paths = [
+    # Если не найден, пробуем альтернативные пути
+    alternative_paths = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path),
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path),
+        os.path.join(os.getcwd(), relative_path),
         relative_path,
     ]
 
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
+    for alt_path in alternative_paths:
+        if os.path.exists(alt_path):
+            return alt_path
 
+    # Если файл не найден нигде
+    logger.warning(f"Ресурс не найден: {relative_path}")
     return None
 
 class LoginWindow(QWidget):
@@ -47,9 +64,15 @@ class LoginWindow(QWidget):
         self.setGeometry(300, 300, 400, 400)
 
         # НАСТРОЙКА ИКОНКИ ОКНА
-        icon_path = resource_path("img/icon.ico")
+        icon_path = resource_path("../img/icon.ico")
         if icon_path and os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
+        else:
+            # Fallback путь
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            icon_path = os.path.join(os.path.dirname(current_dir), '..', 'img', 'icon.ico')
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
 
         # СОЗДАНИЕ ОСНОВНОГО LAYOUT
         layout = QVBoxLayout()

@@ -12,17 +12,28 @@ from datetime import datetime
 import shutil
 
 
-def get_resource_path(relative_path):
-    """Получает корректный путь к ресурсам в режиме exe и разработки"""
+def get_data_dir():
+    """Получает путь к папке с данными для режима exe и разработки"""
     try:
-        # PyInstaller создает временную папку _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        # Поднимаемся на уровень выше (из src в корень проекта)
-        base_path = os.path.dirname(base_path)
+        # PyInstaller создает временную папку в _MEIPASS
+        if getattr(sys, 'frozen', False):
+            # Если запущено как exe
+            base_path = os.path.dirname(sys.executable)
+            # Создаем папку data рядом с exe
+            data_dir = os.path.join(base_path, 'data')
+        else:
+            # Режим разработки
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            data_dir = os.path.join(project_root, 'data')
 
-    return os.path.join(base_path, relative_path)
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+
+    except Exception as e:
+        logger.error(f"Ошибка получения директории данных: {e}")
+        # Возвращаем текущую директорию в случае ошибки
+        return "."
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -165,36 +176,15 @@ class Nutrition(Base):
     recipe = relationship("Recipe", back_populates="nutrition")
 
 
-
 class DataBase:
     def __init__(self):
         """Инициализация подключения к базе данных"""
         try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)
+            # Получаем путь к папке с данными
+            data_dir = get_data_dir()
+            db_path = os.path.join(data_dir, 'Taste_Pazzle.db')
 
-            possible_paths = [
-                get_resource_path('data/Taste_Pazzle.db'),
-                get_resource_path('data/Taste Pazzle.db'),
-                os.path.join(project_root, 'data', 'Taste_Pazzle.db'),
-                os.path.join(project_root, 'data', 'Taste Pazzle.db'),
-                os.path.join(current_dir, '..', 'data', 'Taste_Pazzle.db'),
-                os.path.join(current_dir, '..', 'data', 'Taste Pazzle.db'),
-            ]
-
-            db_path = None
-            for path in possible_paths:
-                normalized_path = os.path.normpath(path)
-                if os.path.exists(normalized_path):
-                    db_path = normalized_path
-                    logger.info(f"Найдена база данных: {db_path}")
-                    break
-
-            if not db_path:
-                data_dir = os.path.join(project_root, 'data')
-                os.makedirs(data_dir, exist_ok=True)
-                db_path = os.path.join(data_dir, 'Taste_Pazzle.db')
-                logger.warning(f"Исходная база данных не найдена. Создана новая: {db_path}")
+            logger.info(f"База данных: {db_path}")
 
             self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
             self.Session = sessionmaker(bind=self.engine)
@@ -542,8 +532,8 @@ class DataBase:
         finally:
             session.close()
 
-    # ===== МЕТОДЫ ДЛЯ РАБОТЫ С КАТЕГОРИЯМИ =====
 
+    # ===== МЕТОДЫ ДЛЯ РАБОТЫ С КАТЕГОРИЯМИ =====
     def get_dish_types(self):
         """Получает список типов блюд"""
         session = self.Session()
@@ -611,7 +601,7 @@ class DataBase:
     # ===== МЕТОДЫ ДЛЯ РАБОТЫ С РЕЦЕПТАМИ =====
 
     def get_recipe_image(self, recipe_id):
-        """Получение изображения рецепта по имени файла из БД"""
+        """Получение изображения рецепта"""
         try:
             session = self.Session()
             recipe = session.query(Recipe).filter_by(id=recipe_id).first()
@@ -622,19 +612,28 @@ class DataBase:
                 return self._create_text_pixmap("Рецепт не найден")
 
             if recipe and recipe.image:
-                possible_paths = [
-                    get_resource_path(os.path.join('img', 'recipe_img', recipe.image)),
-                    os.path.join(get_resource_path('img/recipe_img'), recipe.image),
-                    os.path.join('img', 'recipe_img', recipe.image),
-                ]
+                # В режиме exe ищем в ресурсах PyInstaller
+                if getattr(sys, 'frozen', False):
+                    try:
+                        # PyInstaller упаковывает ресурсы в sys._MEIPASS
+                        base_path = sys._MEIPASS
+                        image_path = os.path.join(base_path, 'img', 'recipe_img', recipe.image)
+                    except Exception:
+                        # Если не нашли в _MEIPASS, ищем рядом с exe
+                        exe_dir = os.path.dirname(sys.executable)
+                        image_path = os.path.join(exe_dir, 'img', 'recipe_img', recipe.image)
+                else:
+                    # Режим разработки
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    project_root = os.path.dirname(current_dir)
+                    image_path = os.path.join(project_root, 'img', 'recipe_img', recipe.image)
 
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        from PyQt6.QtGui import QPixmap
-                        pixmap = QPixmap(path)
-                        if not pixmap.isNull():
-                            session.close()
-                            return pixmap
+                if os.path.exists(image_path):
+                    from PyQt6.QtGui import QPixmap
+                    pixmap = QPixmap(image_path)
+                    if not pixmap.isNull():
+                        session.close()
+                        return pixmap
 
                 logger.warning(f"Файл изображения не найден для рецепта {recipe_id}: {recipe.image}")
 
@@ -643,8 +642,6 @@ class DataBase:
 
         except Exception as e:
             logger.error(f"Ошибка получения изображения для рецепта {recipe_id}: {e}")
-            if 'session' in locals():
-                session.close()
             return self._create_text_pixmap("Ошибка")
 
     def _create_text_pixmap(self, text):
@@ -786,7 +783,7 @@ class DataBase:
                 new_recipe.image = image_filename
                 logger.info(f"Сохранено изображение: {image_filename}")
             else:
-                # Если пользователь не загрузил изображение, оставляем поле пустым
+                # Если пользователь не загружено изображение, оставляем поле пустым
                 new_recipe.image = None
                 logger.info("Изображение не загружено пользователем")
 
@@ -1000,9 +997,6 @@ class DataBase:
             # Выполняем запрос
             results = query.all()
             logger.info(f"Найдено рецептов после фильтрации: {len(results)}")
-
-            # ВАЖНО: Не инициализируем предопределенные категории
-            # Пусть категории формируются динамически на основе dish_type_name
 
             for recipe, dish_type_name, cuisine_name in results:
                 # Получаем данные о питательности
