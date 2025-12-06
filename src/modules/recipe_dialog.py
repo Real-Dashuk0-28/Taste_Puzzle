@@ -116,7 +116,7 @@ class RecipeDialog(QDialog):
         layout = QVBoxLayout()  # Создание вертикального компоновщика
 
         # НАСТРОЙКА ИКОНКИ ОКНА
-        self.setWindowIcon(QtGui.QIcon(resource_path("img/icon.ico")))
+        self.setWindowIcon(QIcon(resource_path("img/icon.ico")))
         # if icon_path and os.path.exists(icon_path):
         #     self.setWindowIcon(QIcon(icon_path))
         # else:
