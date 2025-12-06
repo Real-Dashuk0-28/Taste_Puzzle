@@ -1294,15 +1294,14 @@ class MainWindow(QMainWindow):
         layout.addLayout(logout_layout)
 
     def setup_recipe_filters(self, layout):
-        """Настраивает панель фильтрации рецептов с автодополнением"""
+        """Настраивает панель фильтрации рецептов с чекбоксами для ингредиентов"""
         filters_container = QWidget()
-        filters_container.setFixedHeight(110)
+        filters_container.setFixedHeight(150)  # Увеличиваем высоту
         filters_container.setStyleSheet("""
             QWidget {
                 background-color: white;
                 border-radius: 8px;
                 border: 1px solid #dee2e6;
-                padding: 10px;  # Добавить внутренние отступы
             }
         """)
 
@@ -1346,99 +1345,225 @@ class MainWindow(QMainWindow):
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(10)
 
-        # Поиск по ингредиентам с автодополнением
-        row2_layout.addWidget(QLabel("Ингредиенты:"))
-        self.ingredient_filter = AutoCompleteComboBox()
-        self.ingredient_filter.setMinimumWidth(250)
-        self.ingredient_filter.setPlaceholderText("Введите ингредиенты через запятую...")
-        self.ingredient_filter.setEditable(True)
-
-        # Стили для ComboBox
-        self.ingredient_filter.setStyleSheet("""
-                    QComboBox {
-                        padding: 6px;
-                        border: 1px solid #bdc3c7;
-                        border-radius: 4px;
-                        background-color: white;
-                    }
-                    QComboBox::drop-down {
-                        border: none;
-                        width: 20px;
-                    }
-                    QComboBox::down-arrow {
-                        image: none;
-                        border-left: 5px solid transparent;
-                        border-right: 5px solid transparent;
-                        border-top: 5px solid #7f8c8d;
-                        width: 0;
-                        height: 0;
-                        margin-right: 7px;
-                    }
-                """)
-
-        # Загружаем ингредиенты для автодополнения
-        self.load_ingredients_for_autocomplete()
-
-        # Подключаем сигналы
-        self.ingredient_filter.lineEdit().textChanged.connect(
-            lambda: self.apply_filters(debounced=True)
-        )
-
-        # Добавляем кнопку очистки
-        clear_ingredients_btn = QPushButton("🗑️")
-        clear_ingredients_btn.setFixedSize(60, 40)
-        clear_ingredients_btn.setToolTip("Очистить поле ингредиентов")
-        clear_ingredients_btn.clicked.connect(self.clear_ingredients_filter)
-        clear_ingredients_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f8f9fa;
-                        border: 1px solid #dee2e6;
-                        border-radius: 4px;
-                        font-size: 12px;
-                    }
-                    QPushButton:hover {
-                        background-color: #e9ecef;
-                    }
-                """)
-
-        row2_layout.addWidget(self.ingredient_filter)
-        row2_layout.addWidget(clear_ingredients_btn)
-
         # Поиск по названию рецепта
         row2_layout.addWidget(QLabel("Название:"))
         self.name_filter = SmartSearchLineEdit()
         self.name_filter.setMinimumWidth(250)
         self.name_filter.textChanged.connect(lambda: self.apply_filters(debounced=True))
-
-        # Загружаем подсказки для поиска
         self.load_search_suggestions()
 
-        # Добавляем кнопку очистки для названия
+        # Кнопка очистки для названия
         clear_name_btn = QPushButton("🗑️")
-        clear_name_btn.setFixedSize(60, 40)
+        clear_name_btn.setFixedSize(50, 40)
         clear_name_btn.setToolTip("Очистить поле названия")
         clear_name_btn.clicked.connect(self.clear_name_filter)
-        clear_name_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f8f9fa;
-                        border: 1px solid #dee2e6;
-                        border-radius: 4px;
-                        font-size: 12px;
-                    }
-                    QPushButton:hover {
-                        background-color: #e9ecef;
-                    }
-                """)
-
-        self.name_filter.textChanged.connect(lambda: self.apply_filters(debounced=True))
 
         row2_layout.addWidget(self.name_filter)
         row2_layout.addWidget(clear_name_btn)
-
         row2_layout.addStretch()
+
         filters_layout.addLayout(row2_layout)
 
+        # Третья строка - фильтр по ингредиентам с чекбоксами
+        row3_layout = QHBoxLayout()
+        row3_layout.setSpacing(10)
+
+        row3_layout.addWidget(QLabel("Ингредиенты:"))
+
+        # Создаем виджет для чекбоксов ингредиентов
+        self.ingredients_filter_container = QWidget()
+        self.ingredients_filter_container.setStyleSheet("""
+            QWidget {
+                background-color: #f8f9fa;
+                border-radius: 6px;
+                border: 1px solid #dee2e6;
+                padding: 5px;
+            }
+        """)
+
+        # Горизонтальный layout для чекбоксов
+        self.ingredients_checkbox_layout = QHBoxLayout(self.ingredients_filter_container)
+        self.ingredients_checkbox_layout.setSpacing(10)
+        self.ingredients_checkbox_layout.setContentsMargins(5, 5, 5, 5)
+
+        # Кнопка открытия списка ингредиентов
+        self.ingredient_filter_btn = QPushButton("📋 Выбрать ингредиенты")
+        self.ingredient_filter_btn.clicked.connect(self.show_ingredients_selection)
+        self.ingredient_filter_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
+
+        # Кнопка очистки выбора ингредиентов
+        clear_ingredients_btn = QPushButton("🗑️")
+        clear_ingredients_btn.setFixedSize(50, 40)
+        clear_ingredients_btn.setToolTip("Очистить выбор ингредиентов")
+        clear_ingredients_btn.clicked.connect(self.clear_ingredients_filter)
+
+        row3_layout.addWidget(self.ingredient_filter_btn)
+        row3_layout.addWidget(self.ingredients_filter_container, 1)  # Растягиваем
+        row3_layout.addWidget(clear_ingredients_btn)
+
+        filters_layout.addLayout(row3_layout)
+
         layout.addWidget(filters_container)
+
+    def show_ingredients_selection(self):
+        """Показывает диалог выбора ингредиентов"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Выбор ингредиентов для фильтрации")
+        dialog.setModal(True)
+        dialog.resize(500, 600)
+
+        layout = QVBoxLayout(dialog)
+
+        # Поле поиска ингредиентов
+        search_layout = QHBoxLayout()
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("Поиск ингредиентов...")
+        search_layout.addWidget(search_input)
+
+        # Область с чекбоксами
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        self.ingredients_list_layout = QVBoxLayout(scroll_widget)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+
+        # Загружаем ингредиенты
+        self.load_ingredients_for_checkboxes()
+
+        # Кнопки
+        button_layout = QHBoxLayout()
+        select_all_btn = QPushButton("Выбрать все")
+        select_all_btn.clicked.connect(self.select_all_ingredients)
+        clear_all_btn = QPushButton("Снять все")
+        clear_all_btn.clicked.connect(self.clear_all_ingredients)
+        apply_btn = QPushButton("Применить")
+        apply_btn.clicked.connect(lambda: self.apply_ingredients_filter(dialog))
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(select_all_btn)
+        button_layout.addWidget(clear_all_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(apply_btn)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(search_layout)
+        layout.addWidget(scroll_area)
+        layout.addLayout(button_layout)
+
+        dialog.exec()
+
+    def load_ingredients_for_checkboxes(self):
+        """Загружает ингредиенты для чекбоксов"""
+        try:
+            # Очищаем layout
+            while self.ingredients_list_layout.count():
+                item = self.ingredients_list_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+
+            # Получаем ингредиенты
+            ingredients = self.db.get_ingredients()
+
+            # Сортируем по алфавиту
+            ingredients.sort(key=lambda x: x[1].lower())
+
+            # Создаем чекбоксы
+            self.ingredient_checkboxes = {}
+            for ing_id, ing_name in ingredients:
+                checkbox = QCheckBox(ing_name)
+                checkbox.setObjectName(f"ing_{ing_id}")
+                self.ingredients_list_layout.addWidget(checkbox)
+                self.ingredient_checkboxes[ing_name] = checkbox
+
+            # Добавляем растягивающийся элемент
+            self.ingredients_list_layout.addStretch()
+
+        except Exception as e:
+            logger.error(f"Ошибка загрузки ингредиентов для чекбоксов: {e}")
+
+    def select_all_ingredients(self):
+        """Выбирает все ингредиенты"""
+        for checkbox in self.ingredient_checkboxes.values():
+            checkbox.setChecked(True)
+
+    def clear_all_ingredients(self):
+        """Снимает выбор со всех ингредиентов"""
+        for checkbox in self.ingredient_checkboxes.values():
+            checkbox.setChecked(False)
+
+    def apply_ingredients_filter(self, dialog):
+        """Применяет выбранные ингредиенты"""
+        selected_ingredients = []
+
+        # Собираем выбранные ингредиенты
+        for ing_name, checkbox in self.ingredient_checkboxes.items():
+            if checkbox.isChecked():
+                selected_ingredients.append(ing_name)
+
+        # Обновляем отображение выбранных ингредиентов
+        self.update_selected_ingredients_display(selected_ingredients)
+
+        dialog.accept()
+        self.load_recipes()
+
+    def update_selected_ingredients_display(self, selected_ingredients):
+        """Обновляет отображение выбранных ингредиентов"""
+        # Очищаем контейнер
+        while self.ingredients_checkbox_layout.count():
+            item = self.ingredients_checkbox_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Добавляем выбранные ингредиенты в виде маленьких виджетов
+        for i, ingredient in enumerate(selected_ingredients[:5]):  # Показываем до 5
+            label = QLabel(f"• {ingredient}")
+            label.setStyleSheet("""
+                QLabel {
+                    background-color: #e9ecef;
+                    border-radius: 12px;
+                    padding: 3px 8px;
+                    font-size: 11px;
+                    color: #495057;
+                    margin-right: 5px;
+                }
+            """)
+            self.ingredients_checkbox_layout.addWidget(label)
+
+        # Если больше 5, показываем многоточие
+        if len(selected_ingredients) > 5:
+            label = QLabel(f"... ещё {len(selected_ingredients) - 5}")
+            label.setStyleSheet("""
+                QLabel {
+                    background-color: #e9ecef;
+                    border-radius: 12px;
+                    padding: 3px 8px;
+                    font-size: 11px;
+                    color: #6c757d;
+                    margin-right: 5px;
+                }
+            """)
+            self.ingredients_checkbox_layout.addWidget(label)
+
+        # Сохраняем выбранные ингредиенты
+        self.selected_ingredients = selected_ingredients
+
+        # Обновляем текст кнопки
+        if selected_ingredients:
+            self.ingredient_filter_btn.setText(f"📋 Выбрано: {len(selected_ingredients)}")
+        else:
+            self.ingredient_filter_btn.setText("📋 Выбрать ингредиенты")
 
     def load_search_suggestions(self):
         """Загружает подсказки для поиска по названиям рецептов"""
@@ -1502,8 +1627,9 @@ class MainWindow(QMainWindow):
             logger.error(f"Ошибка загрузки ингредиентов для автодополнения: {e}")
 
     def clear_ingredients_filter(self):
-        """Очищает поле фильтра по ингредиентам"""
-        self.ingredient_filter.lineEdit().clear()
+        """Очищает выбор ингредиентов"""
+        self.selected_ingredients = []
+        self.update_selected_ingredients_display([])
         self.load_recipes()
 
     def clear_name_filter(self):
@@ -1555,7 +1681,10 @@ class MainWindow(QMainWindow):
 
             favorites_only = self.favorites_only.isChecked()
             cooked_only = self.cooked_only.isChecked()
-            ingredient_filter = self.ingredient_filter.text().strip()
+
+            # Используем выбранные ингредиенты
+            ingredient_filter = self.selected_ingredients if hasattr(self, 'selected_ingredients') else []
+
             name_filter = self.name_filter.text().strip()
 
             logger.info(f"Активные фильтры: кухня={cuisine}, время={max_time}, "
@@ -1573,6 +1702,11 @@ class MainWindow(QMainWindow):
                 name_filter=name_filter
             )
 
+            # Проверяем, что grouped_recipes не является None
+            if grouped_recipes is None:
+                logger.error("Ошибка: grouped_recipes равен None")
+                grouped_recipes = {}
+
             logger.info(f"Найдено групп: {len(grouped_recipes)}")
 
             # Отображаем рецепты по категориям
@@ -1585,7 +1719,6 @@ class MainWindow(QMainWindow):
             logger.error(f"Ошибка при загрузке рецептов: {e}", exc_info=True)
             self.show_error_message(f"Ошибка загрузки рецептов: {str(e)}")
 
-
     def display_recipes_by_category(self, grouped_recipes):
         """Отображает рецепты, сгруппированные по категориям"""
         # Полностью очищаем контейнер
@@ -1596,150 +1729,110 @@ class MainWindow(QMainWindow):
             self.show_no_recipes_message()
             return
 
-        # Определяем порядок категорий
-        category_order = [
+        # ВАЖНО: Определяем порядок категорий для приоритетного отображения
+        # Но также показываем и другие категории в конце
+        priority_categories = [
             "Салаты",
             "Десерты",
             "Основные блюда",
             "Завтраки",
             "Гарниры",
-            "Супы"
+            "Супы",
+            "Закуски",  # Добавляем закуски в приоритетные
+            "Напитки",
+            "Соусы"
         ]
 
         total_recipes = 0
 
-        for category in category_order:
+        # Сначала показываем приоритетные категории в заданном порядке
+        for category in priority_categories:
             if category in grouped_recipes and grouped_recipes[category]:
                 recipes = grouped_recipes[category]
                 total_recipes += len(recipes)
+                self.create_category_section(category, recipes)
+                # Удаляем категорию из grouped_recipes, чтобы не показывать её дважды
+                del grouped_recipes[category]
 
-                # Создаем секцию категории
-                category_section = QWidget()
-                category_section.setStyleSheet("""
-                    QWidget {
-                        background-color: transparent;
-                        border: none;
-                    }
-                """)
-
-                category_layout = QVBoxLayout(category_section)
-                category_layout.setContentsMargins(0, 0, 0, 0)
-                category_layout.setSpacing(10)
-
-                # Заголовок категории
-                header = QLabel(f"{self.get_category_icon(category)} {category} ({len(recipes)})")
-                header.setStyleSheet("""
-                    QLabel {
-                        font-size: 18px;
-                        font-weight: bold;
-                        color: #2c3e50;
-                        padding: 10px 15px;
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                            stop:0 rgba(52, 152, 219, 0.1), 
-                            stop:1 rgba(46, 204, 113, 0.1));
-                        border-radius: 8px;
-                        border-left: 4px solid #3498db;
-                    }
-                """)
-                category_layout.addWidget(header)
-
-                # Контейнер для карточек этой категории
-                cards_container = QWidget()
-                cards_container.setStyleSheet("""
-                    QWidget {
-                        background-color: transparent;
-                        border: none;
-                    }
-                """)
-
-                # Используем FlowLayout для карточек
-                flow_layout = FlowLayout(cards_container, margin=15, h_spacing=15, v_spacing=15)
-                cards_container.setLayout(flow_layout)
-
-                # Добавляем карточки
-                for recipe in recipes:
-                    card = RecipeCard(recipe, self.db, self)
-                    flow_layout.addWidget(card)
-                    self.current_recipe_cards.append(card)
-
-                category_layout.addWidget(cards_container)
-
-                # Добавляем разделитель между категориями (кроме последней)
-                if category != category_order[-1]:
-                    separator = QFrame()
-                    separator.setFrameShape(QFrame.Shape.HLine)
-                    separator.setStyleSheet("""
-                        QFrame {
-                            background-color: #dee2e6;
-                            max-height: 1px;
-                            margin: 10px 0;
-                        }
-                    """)
-                    category_layout.addWidget(separator)
-
-                # Добавляем всю секцию в основной контейнер
-                self.recipes_container_layout.addWidget(category_section)
-
-        # Если есть другие категории, не вошедшие в порядок
-        other_categories = [cat for cat in grouped_recipes.keys() if cat not in category_order]
+        # Затем показываем оставшиеся категории в алфавитном порядке
+        other_categories = sorted(grouped_recipes.keys())
         for category in other_categories:
             if grouped_recipes[category]:
                 recipes = grouped_recipes[category]
                 total_recipes += len(recipes)
-
-                category_section = QWidget()
-                category_section.setStyleSheet("""
-                    QWidget {
-                        background-color: transparent;
-                        border: none;
-                    }
-                """)
-
-                category_layout = QVBoxLayout(category_section)
-                category_layout.setContentsMargins(0, 0, 0, 0)
-                category_layout.setSpacing(10)
-
-                # Заголовок категории
-                header = QLabel(f"🍽️ {category} ({len(recipes)})")
-                header.setStyleSheet("""
-                    QLabel {
-                        font-size: 18px;
-                        font-weight: bold;
-                        color: #2c3e50;
-                        padding: 10px 15px;
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                            stop:0 rgba(52, 152, 219, 0.1), 
-                            stop:1 rgba(46, 204, 113, 0.1));
-                        border-radius: 8px;
-                        border-left: 4px solid #3498db;
-                    }
-                """)
-                category_layout.addWidget(header)
-
-                # Контейнер для карточек
-                cards_container = QWidget()
-                cards_container.setStyleSheet("""
-                    QWidget {
-                        background-color: transparent;
-                        border: none;
-                    }
-                """)
-
-                flow_layout = FlowLayout(cards_container, margin=15, h_spacing=15, v_spacing=15)
-                cards_container.setLayout(flow_layout)
-
-                for recipe in recipes:
-                    card = RecipeCard(recipe, self.db, self)
-                    flow_layout.addWidget(card)
-                    self.current_recipe_cards.append(card)
-
-                category_layout.addWidget(cards_container)
-                self.recipes_container_layout.addWidget(category_section)
+                self.create_category_section(category, recipes)
 
         # Добавляем растягивающийся спейсер в конец
         self.recipes_container_layout.addStretch()
 
         self.statusBar.showMessage(f"Загружено рецептов: {total_recipes}", 3000)
+
+    def create_category_section(self, category, recipes):
+        """Создает секцию для категории с рецептами"""
+        category_section = QWidget()
+        category_section.setStyleSheet("""
+            QWidget {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+
+        category_layout = QVBoxLayout(category_section)
+        category_layout.setContentsMargins(0, 0, 0, 0)
+        category_layout.setSpacing(10)
+
+        # Заголовок категории
+        header = QLabel(f"{self.get_category_icon(category)} {category} ({len(recipes)})")
+        header.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #2c3e50;
+                padding: 10px 15px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(52, 152, 219, 0.1), 
+                    stop:1 rgba(46, 204, 113, 0.1));
+                border-radius: 8px;
+                border-left: 4px solid #3498db;
+            }
+        """)
+        category_layout.addWidget(header)
+
+        # Контейнер для карточек этой категории
+        cards_container = QWidget()
+        cards_container.setStyleSheet("""
+            QWidget {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+
+        # Используем FlowLayout для карточек
+        flow_layout = FlowLayout(cards_container, margin=15, h_spacing=15, v_spacing=15)
+        cards_container.setLayout(flow_layout)
+
+        # Добавляем карточки
+        for recipe in recipes:
+            card = RecipeCard(recipe, self.db, self)
+            flow_layout.addWidget(card)
+            self.current_recipe_cards.append(card)
+
+        category_layout.addWidget(cards_container)
+
+        # Добавляем разделитель между категориями
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("""
+            QFrame {
+                background-color: #dee2e6;
+                max-height: 1px;
+                margin: 20px 0;
+            }
+        """)
+        category_layout.addWidget(separator)
+
+        # Добавляем всю секцию в основной контейнер
+        self.recipes_container_layout.addWidget(category_section)
 
     def get_category_icon(self, category):
         """Возвращает иконку для категории"""
@@ -1749,7 +1842,10 @@ class MainWindow(QMainWindow):
             "Основные блюда": "🍛",
             "Завтраки": "🍳",
             "Гарниры": "🥔",
-            "Супы": "🍲"
+            "Супы": "🍲",
+            "Закуски": "🥪",
+            "Напитки": "🥤",
+            "Соусы": "🥫"
         }
         return icons.get(category, "🍽️")
 

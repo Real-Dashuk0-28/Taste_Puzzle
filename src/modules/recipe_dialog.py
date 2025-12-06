@@ -143,29 +143,39 @@ class RecipeDialog(QDialog):
 
         # ФОРМА ДЛЯ ОСНОВНОЙ ИНФОРМАЦИИ О РЕЦЕПТЕ
         form_layout = QFormLayout()
-        form_layout.setSpacing(12)  # Расстояние между элементами
-        form_layout.setContentsMargins(10, 10, 10, 10)  # Отступы
+        form_layout.setSpacing(12)
+        form_layout.setContentsMargins(10, 10, 10, 10)
 
         # Создание элементов ввода
-        self.name_input = QLineEdit()  # Поле ввода названия рецепта
-        self.name_input.setStyleSheet("font-size: 16px; font-weight: bold;")  # Стиль для названия
+        self.name_input = QLineEdit()
+        self.name_input.setStyleSheet("font-size: 16px; font-weight: bold;")
 
-        self.description_input = QTextEdit()  # Текстовое поле для описания
-        self.description_input.setMaximumHeight(80)  # Ограничение высоты поля
+        self.description_input = QTextEdit()
+        self.description_input.setMaximumHeight(80)
 
-        self.instruction_input = QTextEdit()  # Текстовое поле для инструкций
+        self.instruction_input = QTextEdit()
         self.instruction_input.setMaximumHeight(150)
         self.instruction_input.setPlaceholderText("Каждая новая строка будет автоматически пронумерована")
 
-        self.cook_time_input = QSpinBox()  # Спинбокс для времени приготовления
-        self.cook_time_input.setRange(1, 480)  # Установка диапазона значений (1-480 минут)
-        self.cook_time_input.setSuffix(' мин')  # Добавление единицы измерения
+        self.cook_time_input = QSpinBox()
+        self.cook_time_input.setRange(1, 480)
+        self.cook_time_input.setSuffix(' мин')
 
-        # Выпадающий список категорий
-        self.category_combo = QComboBox()
-        categories = self.db.get_categories()  # Получение категорий из базы данных
-        for cat_id, cat_name, cat_type in categories:  # Цикл по всем категориям
-            self.category_combo.addItem(cat_name, cat_id)  # Добавление категории в список
+        # === ДОБАВЛЕНЫ ДВА КОМБОБОКСА ===
+
+        # ВЫПАДАЮЩИЙ СПИСОК ТИПА БЛЮДА (dish_type)
+        self.dish_type_combo = QComboBox()
+        self.dish_type_combo.addItem("Не выбран", None)
+        dish_types = self.db.get_dish_types()  # Прямой вызов метода
+        for cat_id, cat_name in dish_types:
+            self.dish_type_combo.addItem(cat_name, cat_id)
+
+        # ВЫПАДАЮЩИЙ СПИСОК КУХНИ (cuisine)
+        self.cuisine_combo = QComboBox()
+        self.cuisine_combo.addItem("Не выбрана", None)
+        cuisines = self.db.get_cuisines()  # Прямой вызов метода
+        for cat_id, cat_name in cuisines:
+            self.cuisine_combo.addItem(cat_name, cat_id)
 
         # СЕКЦИЯ ЗАГРУЗКИ ИЗОБРАЖЕНИЯ
         image_layout = QHBoxLayout()
@@ -189,12 +199,13 @@ class RecipeDialog(QDialog):
         image_layout.addWidget(self.image_label)
         image_layout.addWidget(load_image_btn)
 
-        # ДОБАВЛЕНИЕ ЭЛЕМЕНТОВ В ФОРМУ
+        # ДОБАВЛЕНИЕ ЭЛЕМЕНТОВ В ФОРМУ (ИЗМЕНЕНЫ НАЗВАНИЯ ПОЛЕЙ)
         form_layout.addRow('Название:', self.name_input)
         form_layout.addRow('Описание:', self.description_input)
-        form_layout.addRow('Категория:', self.category_combo)
+        form_layout.addRow('Кухня:', self.cuisine_combo)
+        form_layout.addRow('Тип блюда:', self.dish_type_combo)
         form_layout.addRow('Время приготовления:', self.cook_time_input)
-        form_layout.addRow('Изображение:', image_layout)  # Добавление секции изображения
+        form_layout.addRow('Изображение:', image_layout)
         form_layout.addRow('Инструкции:', self.instruction_input)
 
         # СЕКЦИЯ ДЛЯ РАБОТЫ С ИНГРЕДИЕНТАМИ
@@ -382,19 +393,41 @@ class RecipeDialog(QDialog):
         """Метод загрузки данных рецепта в форму (для редактирования)"""
         try:
             # Загрузка основных данных рецепта
-            self.name_input.setText(self.recipe_data[2])  # Установка названия
-            self.description_input.setPlainText(self.recipe_data[4] or '')  # Установка описания
+            self.name_input.setText(self.recipe_data[2])
+            self.description_input.setPlainText(self.recipe_data[4] or '')
 
             # Форматируем инструкции с автоматической нумерацией
             instructions = self.format_instructions(self.recipe_data[3])
-            self.instruction_input.setPlainText(instructions)  # Установка инструкций
+            self.instruction_input.setPlainText(instructions)
 
-            self.cook_time_input.setValue(self.recipe_data[8] or 30)  # Установка времени приготовления
+            self.cook_time_input.setValue(self.recipe_data[8] or 30)
 
-            # Установка категории
-            category_index = self.category_combo.findData(self.recipe_data[5])  # Поиск индекса категории по ID
-            if category_index >= 0:  # Если категория найдена
-                self.category_combo.setCurrentIndex(category_index)  # Установка текущей категории
+            # === ЗАГРУЗКА КУХНИ (cuisine) ===
+            # recipe_data[17] - это название кухни, но нам нужно ID
+            if len(self.recipe_data) > 17 and self.recipe_data[17]:
+                # Получаем ID кухни по названию
+                cuisine_id = self.db.get_cuisine_by_name(self.recipe_data[17])
+                if cuisine_id:
+                    cuisine_index = self.cuisine_combo.findData(cuisine_id)
+                    if cuisine_index >= 0:
+                        self.cuisine_combo.setCurrentIndex(cuisine_index)
+                    else:
+                        self.cuisine_combo.setCurrentIndex(0)
+                else:
+                    self.cuisine_combo.setCurrentIndex(0)
+            else:
+                self.cuisine_combo.setCurrentIndex(0)
+
+            # === ЗАГРУЗКА ТИПА БЛЮДА (dish_type) ===
+            # recipe_data[5] - это dish_type_id
+            if self.recipe_data[5]:
+                dish_type_index = self.dish_type_combo.findData(self.recipe_data[5])
+                if dish_type_index >= 0:
+                    self.dish_type_combo.setCurrentIndex(dish_type_index)
+                else:
+                    self.dish_type_combo.setCurrentIndex(0)
+            else:
+                self.dish_type_combo.setCurrentIndex(0)
 
             # Загрузка изображения если есть
             if self.recipe_data[6]:  # image data
@@ -449,7 +482,7 @@ class RecipeDialog(QDialog):
         """Метод сохранения рецепта"""
         try:
             # Проверка обязательных полей
-            if not self.name_input.text().strip():  # Если название пустое
+            if not self.name_input.text().strip():
                 QMessageBox.warning(self, 'Ошибка', 'Введите название рецепта')
                 return
 
@@ -458,7 +491,13 @@ class RecipeDialog(QDialog):
                 return
 
             # Получение данных из формы
-            category_id = self.category_combo.currentData()  # ID выбранной категории
+            dish_type_id = self.dish_type_combo.currentData()
+            cuisine_id = self.cuisine_combo.currentData()
+
+            # Проверка типа блюда (обязательное поле)
+            if not dish_type_id:
+                QMessageBox.warning(self, 'Ошибка', 'Выберите тип блюда')
+                return
 
             # Убираем автоматическую нумерацию перед сохранением
             instructions = self.unformat_instructions(self.instruction_input.toPlainText())
@@ -471,25 +510,27 @@ class RecipeDialog(QDialog):
             )
 
             # Сохранение рецепта в базу данных
-            if self.recipe_data:  # Если это редактирование существующего рецепта
+            if self.recipe_data:
                 success = self.db.update_recipe(
-                    self.recipe_data[0],  # ID рецепта
-                    self.name_input.text(),  # Название
-                    instructions,  # Инструкции
-                    self.description_input.toPlainText(),  # Описание
-                    category_id,  # ID категории
-                    self.cook_time_input.value(),  # Время приготовления
-                    self.ingredients_data,  # Список ингредиентов
-                    nutrition_data,  # Данные КБЖУ
-                    self.image_data  # Данные изображения
+                    self.recipe_data[0],
+                    self.name_input.text(),
+                    instructions,
+                    self.description_input.toPlainText(),
+                    dish_type_id,  # Тип блюда
+                    cuisine_id,  # Кухня
+                    self.cook_time_input.value(),
+                    self.ingredients_data,
+                    nutrition_data,
+                    self.image_data
                 )
-            else:  # Если это создание нового рецепта
+            else:
                 recipe_id = self.db.add_recipe(
                     self.user_id,
                     self.name_input.text(),
                     instructions,
                     self.description_input.toPlainText(),
-                    category_id,
+                    dish_type_id,  # Тип блюда
+                    cuisine_id,  # Кухня
                     self.cook_time_input.value(),
                     self.ingredients_data,
                     nutrition_data,
@@ -674,9 +715,29 @@ class RecipeCardDialog(QDialog):
         image_container.addWidget(image_label)
         image_container.addStretch()
 
-        # Информация справа (категория и время) - занимает 60% ширины
+        # Информация справа (кухня, категория и время) - занимает 60% ширины
         info_container = QVBoxLayout()
         info_container.setSpacing(15)
+
+        # Кухня (если есть)
+        if len(self.recipe_data) > 17 and self.recipe_data[17]:
+            cuisine_box = QWidget()
+            cuisine_box.setStyleSheet("""
+                QWidget {
+                    background-color: #e8f5e9;
+                    border-radius: 8px;
+                    border: 1px solid #c8e6c9;
+                }
+            """)
+            cuisine_layout = QVBoxLayout(cuisine_box)
+            cuisine_label = QLabel("🌍 Кухня")
+            cuisine_label.setStyleSheet("font-weight: bold; color: #2e7d32; font-size: 14px; margin-bottom: 5px;")
+            cuisine_value = QLabel(self.recipe_data[17])
+            cuisine_value.setStyleSheet("color: #2e7d32; font-size: 16px; font-weight: 500;")
+            cuisine_value.setWordWrap(True)
+            cuisine_layout.addWidget(cuisine_label)
+            cuisine_layout.addWidget(cuisine_value)
+            info_container.addWidget(cuisine_box)
 
         # Категория
         category_box = QWidget()
@@ -688,13 +749,15 @@ class RecipeCardDialog(QDialog):
             }
         """)
         category_layout = QVBoxLayout(category_box)
-        category_label = QLabel("🍽️ Категория")
+        category_label = QLabel("🍽️ Тип блюда")
         category_label.setStyleSheet("font-weight: bold; color: #1565c0; font-size: 14px; margin-bottom: 5px;")
-        category_value = QLabel(self.recipe_data[9] or 'Не указана')
+        category_value = QLabel(
+            self.recipe_data[18] if len(self.recipe_data) > 18 else self.recipe_data[9] or 'Не указана')
         category_value.setStyleSheet("color: #1565c0; font-size: 16px; font-weight: 500;")
         category_value.setWordWrap(True)
         category_layout.addWidget(category_label)
         category_layout.addWidget(category_value)
+        info_container.addWidget(category_box)
 
         # Время приготовления
         time_box = QWidget()
@@ -712,6 +775,7 @@ class RecipeCardDialog(QDialog):
         time_value.setStyleSheet("color: #ef6c00; font-size: 16px; font-weight: 500;")
         time_layout.addWidget(time_label)
         time_layout.addWidget(time_value)
+        info_container.addWidget(time_box)
 
         # Видео-ссылка если есть
         if self.recipe_data[7]:
@@ -734,8 +798,6 @@ class RecipeCardDialog(QDialog):
             video_layout.addWidget(video_link)
             info_container.addWidget(video_box)
 
-        info_container.addWidget(category_box)
-        info_container.addWidget(time_box)
         info_container.addStretch()
 
         first_block_layout.addLayout(image_container)
