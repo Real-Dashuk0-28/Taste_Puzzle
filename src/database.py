@@ -1,49 +1,16 @@
-import os
-import logging
 import re
-import sys
-
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, ForeignKey, Boolean, Table, text, \
-    LargeBinary, DateTime, or_
+import shutil
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, ForeignKey, Table, text, DateTime, or_
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session, joinedload
+from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import inspect
 from datetime import datetime
-import shutil
-
-
-def get_data_dir():
-    """Получает путь к папке с данными для режима exe и разработки"""
-    try:
-        # PyInstaller создает временную папку в _MEIPASS
-        if getattr(sys, 'frozen', False):
-            # Если запущено как exe
-            base_path = os.path.dirname(sys.executable)
-            # Создаем папку data рядом с exe
-            data_dir = os.path.join(base_path, 'data')
-        else:
-            # Режим разработки
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)
-            data_dir = os.path.join(project_root, 'data')
-
-        os.makedirs(data_dir, exist_ok=True)
-        return data_dir
-
-    except Exception as e:
-        logger.error(f"Ошибка получения директории данных: {e}")
-        # Возвращаем текущую директорию в случае ошибки
-        return "."
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+import os
 
 # Базовый класс для моделей SQLAlchemy
 Base = declarative_base()
 
 # Ассоциативные таблицы для связей многие-ко-многим
-
 recipe_ingredients = Table(
     'Recipe_ingredients', Base.metadata,
     Column('recipe_id', Integer, ForeignKey('Recipes.id'), primary_key=True),
@@ -180,20 +147,16 @@ class DataBase:
     def __init__(self):
         """Инициализация подключения к базе данных"""
         try:
-            # Получаем путь к папке с данными
-            data_dir = get_data_dir()
-            db_path = os.path.join(data_dir, 'Taste_Pazzle.db')
-
-            logger.info(f"База данных: {db_path}")
+            db_path = os.path.join('../data/Taste_Pazzle.db')
 
             self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
             self.Session = sessionmaker(bind=self.engine)
 
-            # Сначала создаем все таблицы
             Base.metadata.create_all(self.engine)
 
             # Создаем дополнительные таблицы если их нет
             self._create_additional_tables()
+
             # Добавляем отсутствующие столбцы
             self._migrate_database()
 
@@ -205,10 +168,9 @@ class DataBase:
             self.check_image_status()
             self.migrate_existing_images()
 
-            logger.info("База данных успешно подключена")
 
         except Exception as e:
-            logger.error(f"Ошибка подключения к базе данных: {e}")
+            print(f"Ошибка подключения к базе данных: {e}")
             raise
 
     def _migrate_database(self):
@@ -216,9 +178,7 @@ class DataBase:
         try:
             # Создаем все таблицы из моделей
             Base.metadata.create_all(self.engine)
-            logger.info("Все таблицы созданы")
 
-            # Заполняем Dish_types начальными значениями
             session = self.Session()
             try:
                 dish_type_names = ["Салаты", "Десерты", "Основные блюда", "Завтраки", "Гарниры", "Супы"]
@@ -229,12 +189,10 @@ class DataBase:
                         session.add(dish_type)
 
                 session.commit()
-                logger.info("Таблица Dish_types заполнена начальными значениями")
             finally:
                 session.close()
 
         except Exception as e:
-            logger.error(f"Ошибка миграции базы данных: {e}")
             raise
 
     def migrate_existing_images(self):
@@ -251,15 +209,12 @@ class DataBase:
                         new_filename = os.path.basename(old_path)
                         recipe.image = new_filename
                         migrated_count += 1
-                        logger.info(f"Мигрирован путь: {old_path} -> {new_filename}")
 
             if migrated_count > 0:
                 session.commit()
-                logger.info(f"Мигрировано {migrated_count} путей изображений")
 
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка при миграции изображений: {e}")
         finally:
             session.close()
 
@@ -297,7 +252,6 @@ class DataBase:
             }
 
             recipes = session.query(Recipe).all()
-            logger.info(f"Найдено {len(recipes)} рецептов для назначения изображений")
 
             used_images = set()
             updated_count = 0
@@ -335,10 +289,8 @@ class DataBase:
                                 used_images.add(unique_image_name)
                                 updated_count += 1
                                 image_assigned = True
-                                logger.info(f"Создано уникальное изображение: '{recipe.name}' -> {unique_image_name}")
                                 break
                             except Exception as e:
-                                logger.error(f"Ошибка копирования изображения: {e}")
                                 continue
 
                 # Если не назначили по ключевому слову, используем хэш
@@ -372,10 +324,8 @@ class DataBase:
                                     used_images.add(unique_image_name)
                                     updated_count += 1
                                     image_assigned = True
-                                    logger.info(f"Назначено по хэшу: '{recipe.name}' -> {unique_image_name}")
                                     break
                                 except Exception as e:
-                                    logger.error(f"Ошибка копирования изображения: {e}")
                                     continue
 
                 if not image_assigned and available_images:
@@ -398,19 +348,16 @@ class DataBase:
                             shutil.copy2(original_path, unique_path)
                             recipe.image = unique_image_name
                             updated_count += 1
-                            logger.info(f"Назначено первое доступное: '{recipe.name}' -> {unique_image_name}")
                         except Exception as e:
-                            logger.error(f"Ошибка копирования изображения: {e}")
+                            pass
 
             session.commit()
-            logger.info(f"Создано {updated_count} уникальных изображений для рецептов")
             self._verify_image_assignments()
 
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка при назначении изображений рецептам: {e}")
             import traceback
-            logger.error(traceback.format_exc())
+            print(traceback.format_exc())
         finally:
             session.close()
 
@@ -428,19 +375,18 @@ class DataBase:
                     else:
                         image_count[recipe.image] = 1
 
-            logger.info("=== ПРОВЕРКА НАЗНАЧЕНИЯ ИЗОБРАЖЕНИЙ ===")
             for image_file, count in image_count.items():
                 status = "OK" if count == 1 else "ПОВТОР"
-                logger.info(f"{image_file}: {count} рецептов - {status}")
+                print(f"{image_file}: {count} рецептов - {status}")
 
             recipes_without_images = [r for r in recipes if not r.image]
             if recipes_without_images:
-                logger.warning(f"Рецепты без изображений: {len(recipes_without_images)}")
+                print(f"Рецепты без изображений: {len(recipes_without_images)}")
                 for recipe in recipes_without_images:
-                    logger.warning(f"  - {recipe.name}")
+                    print(f"  - {recipe.name}")
 
         except Exception as e:
-            logger.error(f"Ошибка при проверке назначения изображений: {e}")
+            print(f"Ошибка при проверке назначения изображений: {e}")
         finally:
             session.close()
 
@@ -462,11 +408,6 @@ class DataBase:
                     if os.path.exists(image_path):
                         available_images += 1
 
-            logger.info(f"=== СТАТУС ИЗОБРАЖЕНИЙ ===")
-            logger.info(f"Всего рецептов: {total_recipes}")
-            logger.info(f"Рецептов с именами изображений: {len(recipes_with_images)}")
-            logger.info(f"Доступных файлов изображений: {available_images}")
-
             recipes = session.query(Recipe).all()
             for recipe in recipes:
                 if recipe.image:
@@ -474,10 +415,9 @@ class DataBase:
                     status = "Есть файл" if os.path.exists(image_path) else "Файл не найден"
                 else:
                     status = "Нет изображения"
-                logger.info(f"Рецепт {recipe.id}: '{recipe.name}' -> {recipe.image} - {status}")
 
         except Exception as e:
-            logger.error(f"Ошибка проверки статуса изображений: {e}")
+            print(f"Ошибка проверки статуса изображений: {e}")
         finally:
             session.close()
 
@@ -489,14 +429,12 @@ class DataBase:
 
             if 'cart' not in existing_tables:
                 Cart.__table__.create(self.engine, checkfirst=True)
-                logger.info("Таблица cart создана")
 
             if 'cooked_recipes' not in existing_tables:
                 CookedRecipe.__table__.create(self.engine, checkfirst=True)
-                logger.info("Таблица cooked_recipes создана")
 
         except Exception as e:
-            logger.error(f"Ошибка создания дополнительных таблиц: {e}")
+            print(f"Ошибка создания дополнительных таблиц: {e}")
             raise
 
     def _check_existing_data(self):
@@ -517,18 +455,11 @@ class DataBase:
             categories_count = session.query(Category).count()
             ingredients_count = session.query(Ingredient).count()
 
-            logger.info(f"Количество пользователей в БД: {users_count}")
-            logger.info(f"Количество рецептов в БД: {recipes_count}")
-            logger.info(f"Количество категорий в БД: {categories_count}")
-            logger.info(f"Количество ингредиентов в БД: {ingredients_count}")
-
             # Выводим первых 5 пользователей для отладки
             users = session.query(User).limit(5).all()
-            for user in users:
-                logger.info(f"Пользователь: id={user.id}, login={user.login}")
 
         except Exception as e:
-            logger.error(f"Ошибка при проверке данных БД: {e}")
+            print(f"Ошибка при проверке данных БД: {e}")
         finally:
             session.close()
 
@@ -577,7 +508,6 @@ class DataBase:
             categories = session.query(Category).all()
             return [(cat.id, cat.name, cat.type) for cat in categories]
         except Exception as e:
-            logger.error(f"Ошибка получения категорий: {e}")
             return []
         finally:
             session.close()
@@ -601,48 +531,25 @@ class DataBase:
     # ===== МЕТОДЫ ДЛЯ РАБОТЫ С РЕЦЕПТАМИ =====
 
     def get_recipe_image(self, recipe_id):
-        """Получение изображения рецепта"""
+        """Упрощенная загрузка изображения рецепта"""
         try:
             session = self.Session()
             recipe = session.query(Recipe).filter_by(id=recipe_id).first()
 
-            if not recipe:
-                logger.warning(f"Рецепт с ID {recipe_id} не найден")
-                session.close()
-                return self._create_text_pixmap("Рецепт не найден")
-
             if recipe and recipe.image:
-                # В режиме exe ищем в ресурсах PyInstaller
-                if getattr(sys, 'frozen', False):
-                    try:
-                        # PyInstaller упаковывает ресурсы в sys._MEIPASS
-                        base_path = sys._MEIPASS
-                        image_path = os.path.join(base_path, 'img', 'recipe_img', recipe.image)
-                    except Exception:
-                        # Если не нашли в _MEIPASS, ищем рядом с exe
-                        exe_dir = os.path.dirname(sys.executable)
-                        image_path = os.path.join(exe_dir, 'img', 'recipe_img', recipe.image)
-                else:
-                    # Режим разработки
-                    current_dir = os.path.dirname(os.path.abspath(__file__))
-                    project_root = os.path.dirname(current_dir)
-                    image_path = os.path.join(project_root, 'img', 'recipe_img', recipe.image)
+                image_path = f"../img/recipe_img/{recipe.image}"
+                from PyQt6.QtGui import QPixmap
+                pixmap = QPixmap(image_path)
+                if not pixmap.isNull():
+                    session.close()
+                    return pixmap
 
-                if os.path.exists(image_path):
-                    from PyQt6.QtGui import QPixmap
-                    pixmap = QPixmap(image_path)
-                    if not pixmap.isNull():
-                        session.close()
-                        return pixmap
-
-                logger.warning(f"Файл изображения не найден для рецепта {recipe_id}: {recipe.image}")
-
+            recipe_name = recipe.name if recipe else "Рецепт"
             session.close()
-            return self._create_text_pixmap(recipe.name if recipe else "Без названия")
+            return self._create_text_pixmap(recipe_name)
 
         except Exception as e:
-            logger.error(f"Ошибка получения изображения для рецепта {recipe_id}: {e}")
-            return self._create_text_pixmap("Ошибка")
+            return self._create_text_pixmap("Изображение")
 
     def _create_text_pixmap(self, text):
         """Создает QPixmap с текстовой заглушкой"""
@@ -700,7 +607,6 @@ class DataBase:
                 return 1.0, str(quantity_str)
 
         except Exception as e:
-            logger.error(f"Ошибка парсинга количества '{quantity_str}': {e}")
             return 1.0, 'шт'
 
     def save_recipe_image(self, image_data, recipe_id, recipe_name):
@@ -730,14 +636,11 @@ class DataBase:
             elif isinstance(image_data, str) and os.path.exists(image_data):
                 shutil.copy2(image_data, image_path)
             else:
-                logger.warning(f"Неизвестный тип данных изображения: {type(image_data)}")
                 return None
 
-            logger.info(f"Изображение сохранено: {image_filename}")
             return image_filename
 
         except Exception as e:
-            logger.error(f"Ошибка сохранения изображения рецепта: {e}")
             return None
 
     def add_recipe(self, user_id, name, instruction, description, dish_type_id, cuisine_id,
@@ -745,21 +648,16 @@ class DataBase:
         """Добавление нового рецепта"""
         session = self.Session()
         try:
-            logger.info(f"=== НАЧАЛО ДОБАВЛЕНИЯ РЕЦЕПТА ===")
-            logger.info(f"Пользователь: {user_id}, Название: {name}")
-            logger.info(f"Тип блюда ID: {dish_type_id}, Кухня ID: {cuisine_id}")
 
             # Проверяем существование dish_type_id и cuisine_id
             if dish_type_id:
                 dish_type = session.query(Dish_types).get(dish_type_id)
                 if not dish_type:
-                    logger.error(f"Тип блюда с ID {dish_type_id} не найден")
                     return None
 
             if cuisine_id:
                 cuisine = session.query(Cuisines).get(cuisine_id)
                 if not cuisine:
-                    logger.error(f"Кухня с ID {cuisine_id} не найден")
                     return None
 
             # Создаем рецепт
@@ -774,18 +672,15 @@ class DataBase:
             )
             session.add(new_recipe)
             session.flush()
-            logger.info(f"Создан рецепт с ID: {new_recipe.id}")
 
             # Обрабатываем изображение если оно есть
             image_filename = None
             if image:
                 image_filename = self.save_recipe_image(image, new_recipe.id, name)
                 new_recipe.image = image_filename
-                logger.info(f"Сохранено изображение: {image_filename}")
             else:
                 # Если пользователь не загружено изображение, оставляем поле пустым
                 new_recipe.image = None
-                logger.info("Изображение не загружено пользователем")
 
             # Добавляем ингредиенты
             for ing_id, quantity, unit in ingredients_list:
@@ -795,7 +690,6 @@ class DataBase:
                     quantity=quantity
                 )
                 session.execute(recipe_ingredient)
-            logger.info(f"Добавлено {len(ingredients_list)} ингредиентов")
 
             # Добавляем данные о питательности
             if any(nutrition_data):
@@ -807,19 +701,12 @@ class DataBase:
                     carbohydrates=nutrition_data[3]
                 )
                 session.add(nutrition)
-                logger.info(f"Добавлена пищевая ценность")
 
             session.commit()
-            logger.info(f"=== РЕЦЕПТ УСПЕШНО ДОБАВЛЕН ===")
-            logger.info(f"Рецепт '{name}' успешно добавлен с ID {new_recipe.id}")
-
             return new_recipe.id
 
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка добавления рецепта: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
             return None
         finally:
             session.close()
@@ -830,8 +717,7 @@ class DataBase:
         try:
             recipe = session.query(Recipe).filter_by(id=recipe_id).first()
             return recipe
-        except Exception as e:
-            logger.error(f"Ошибка получения рецепта по ID {recipe_id}: {e}")
+        except Exception:
             return None
         finally:
             session.close()
@@ -841,9 +727,8 @@ class DataBase:
         session = self.Session()
         try:
             dish_types = session.query(Dish_types).all()
-            return dish_types  # Возвращаем объекты, а не кортежи
-        except Exception as e:
-            logger.error(f"Ошибка получения типов блюд: {e}")
+            return dish_types
+        except Exception:
             return []
         finally:
             session.close()
@@ -853,28 +738,25 @@ class DataBase:
         session = self.Session()
         try:
             cuisines = session.query(Cuisines).all()
-            return cuisines  # Возвращаем объекты, а не кортежи
-        except Exception as e:
-            logger.error(f"Ошибка получения кухонь: {e}")
+            return cuisines
+        except Exception:
             return []
         finally:
             session.close()
 
-    # Методы-обертки для избранного и приготовленного (чтобы совместить со старым кодом)
     def add_to_favorites(self, user_id, recipe_id):
-        """Добавляет рецепт в избранное (обертка для совместимости)"""
-        return self.toggle_favorite(user_id, recipe_id)  # toggle_favorite добавляет если нет
+        """ Добавляет рецепт в избранное """
+        return self.toggle_favorite(user_id, recipe_id)
 
     def remove_from_favorites(self, user_id, recipe_id):
-        """Удаляет рецепт из избранного (обертка для совместимости)"""
-        # toggle_favorite удаляет если есть
+        """ Удаляет рецепт из избранного """
         return self.toggle_favorite(user_id, recipe_id)
 
     def is_cooked(self, user_id, recipe_id):
         return self.is_recipe_cooked(user_id, recipe_id)
 
     def mark_as_cooked(self, user_id, recipe_id, cooked=True):
-        """Отмечает рецепт как приготовленный (обертка для совместимости)"""
+        """ Отмечает рецепт как приготовленный """
         return self.mark_recipe_as_cooked(user_id, recipe_id, cooked)
 
     def update_recipe(self, recipe_id, name, instruction, description, dish_type_id, cuisine_id,
@@ -884,7 +766,6 @@ class DataBase:
         try:
             recipe = session.query(Recipe).filter_by(id=recipe_id).first()
             if not recipe:
-                logger.error(f"Рецепт с ID {recipe_id} не найден")
                 return False
 
             # Обновляем основные данные
@@ -929,12 +810,10 @@ class DataBase:
                 session.add(new_nutrition)
 
             session.commit()
-            logger.info(f"Рецепт с ID {recipe_id} успешно обновлен")
             return True
 
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка обновления рецепта: {e}")
             return False
         finally:
             session.close()
@@ -945,11 +824,9 @@ class DataBase:
         """Получение рецептов с фильтрами с группировкой по типам блюд"""
         session = self.Session()
 
-        # Инициализируем grouped_recipes как пустой словарь
         grouped_recipes = {}
 
         try:
-            # Базовый запрос с JOIN для типа блюда и кухни
             query = session.query(
                 Recipe,
                 Dish_types.name.label('dish_type_name'),
@@ -960,22 +837,13 @@ class DataBase:
                 Cuisines, Recipe.cuisine_id == Cuisines.id
             )
 
-            logger.info(f"=== НАЧАЛО ФИЛЬТРАЦИИ ===")
-            logger.info(f"Пользователь ID: {user_id}")
-            logger.info(f"Кухня: {cuisine}, Время: {max_time}")
-            logger.info(f"Только избранное: {favorites_only}, Только приготовленные: {cooked_only}")
-            logger.info(f"Фильтр ингредиентов: {ingredient_filter}")
-            logger.info(f"Фильтр названия: {name_filter}")
-
             # Фильтр по кухне
             if cuisine and cuisine != "Любая кухня":
-                logger.info(f"Применяем фильтр по кухне: {cuisine}")
                 query = query.filter(Cuisines.name == cuisine)
 
             # Фильтр по времени приготовления
             if max_time:
                 query = query.filter(Recipe.cook_time <= max_time)
-                logger.info(f"Применен фильтр по времени: <= {max_time} мин")
 
             # Фильтр по избранному
             if favorites_only:
@@ -983,13 +851,11 @@ class DataBase:
                     favorites.c.user_id == user_id
                 ).subquery()
                 query = query.filter(Recipe.id.in_(favorite_subquery))
-                logger.info("Применен фильтр: Только избранное")
 
             # Фильтр по приготовленным рецептам
             if cooked_only:
                 cooked_subquery = session.query(CookedRecipe.recipe_id).filter_by(user_id=user_id).subquery()
                 query = query.filter(Recipe.id.in_(cooked_subquery))
-                logger.info("Применен фильтр: Только приготовленные")
 
             # Фильтр по названию
             if name_filter and name_filter.strip():
@@ -1005,13 +871,11 @@ class DataBase:
                 for term in search_terms:
                     conditions.append(Recipe.name.ilike(term))
                 query = query.filter(or_(*conditions))
-                logger.info(f"Применен фильтр по названию: {name_filter}")
 
-            # Фильтр по ингредиентам (список выбранных ингредиентов)
+            # Фильтр по ингредиентам
             if ingredient_filter and isinstance(ingredient_filter, list) and ingredient_filter:
-                logger.info(f"Применяем фильтр по ингредиентам: {ingredient_filter}")
 
-                # Для каждого ингредиента создаем подзапрос
+                # Для каждого ингредиента создаем под запрос
                 subqueries = []
                 for ing_name in ingredient_filter:
                     matching_ingredients = session.query(Ingredient).filter(
@@ -1020,26 +884,24 @@ class DataBase:
 
                     if matching_ingredients:
                         ing_ids = [ing.id for ing in matching_ingredients]
-                        logger.info(f"Найдено {len(matching_ingredients)} совпадений для '{ing_name}'")
 
-                        # Создаем подзапрос для текущего ингредиента
+                        # Создаем под запрос для текущего ингредиента
                         ing_subquery = session.query(recipe_ingredients.c.recipe_id).filter(
                             recipe_ingredients.c.ingredient_id.in_(ing_ids)
                         ).subquery()
 
-                        # Добавляем в список подзапросов
+                        # Добавляем в список под запросов
                         subqueries.append(ing_subquery)
                     else:
-                        logger.info(f"Ингредиенты по запросу '{ing_name}' не найдены")
-                        # Если хотя бы один ингредиент не найден, возвращаем пустой результат
+                        # Если один ингредиент не найден, возвращаем пустой результат
                         return {}
 
-                # Объединяем все подзапросы - рецепт должен содержать ВСЕ указанные ингредиенты
+                # Объединяем все под запросы - рецепт должен содержать ВСЕ указанные ингредиенты
                 if subqueries:
-                    # Начинаем с первого подзапроса
+                    # Начинаем с первого под запроса
                     combined_subquery = subqueries[0]
 
-                    # Пересекаем со всеми остальными подзапросами
+                    # Пересекаем со всеми остальными под запросами
                     for subquery in subqueries[1:]:
                         combined_subquery = session.query(combined_subquery.c.recipe_id).intersect(
                             session.query(subquery.c.recipe_id)
@@ -1049,7 +911,6 @@ class DataBase:
 
             # Выполняем запрос
             results = query.all()
-            logger.info(f"Найдено рецептов после фильтрации: {len(results)}")
 
             for recipe, dish_type_name, cuisine_name in results:
                 # Получаем данные о питательности
@@ -1068,8 +929,6 @@ class DataBase:
                     user_id=user_id, recipe_id=recipe.id
                 ).first() is not None
 
-                # Используем dish_type_name как категорию
-                # Если dish_type_name нет, используем "Основные блюда" по умолчанию
                 dish_type = dish_type_name or "Основные блюда"
 
                 recipe_tuple = (
@@ -1082,8 +941,8 @@ class DataBase:
                     recipe.image,
                     recipe.external_url,
                     recipe.cook_time,
-                    dish_type,  # dish_type_name
-                    None,  # зарезервировано
+                    dish_type,
+                    None,
                     calories,
                     proteins,
                     fats,
@@ -1100,14 +959,10 @@ class DataBase:
 
                 grouped_recipes[dish_type].append(recipe_tuple)
 
-            logger.info(f"=== КОНЕЦ ФИЛЬТРАЦИИ ===")
-            logger.info(f"Группировка: {', '.join([f'{k}: {len(v)}' for k, v in grouped_recipes.items()])}")
-
             return grouped_recipes
 
         except Exception as e:
-            logger.error(f"Ошибка получения рецептов: {e}", exc_info=True)
-            return {}
+           return {}
         finally:
             session.close()
 
@@ -1130,7 +985,6 @@ class DataBase:
                 return ingredients_data
             return []
         except Exception as e:
-            logger.error(f"Ошибка получения ингредиентов рецепта: {e}")
             return []
         finally:
             session.close()
@@ -1178,22 +1032,19 @@ class DataBase:
                     if os.path.exists(image_path):
                         try:
                             os.remove(image_path)
-                            logger.info(f"Удален файл изображения: {recipe.image}")
                         except Exception as e:
-                            logger.error(f"Ошибка удаления файла изображения: {e}")
+                            print(f"Ошибка удаления файла изображения: {e}")
                     else:
-                        logger.warning(f"Файл изображения не найден: {recipe.image}")
+                        print(f"Файл изображения не найден: {recipe.image}")
                 else:
-                    logger.info(f"Изображение '{recipe.image}' используется другими рецептами, не удаляем")
+                    print(f"Изображение '{recipe.image}' используется другими рецептами, не удаляем")
 
                 session.delete(recipe)
                 session.commit()
-                logger.info(f"Рецепт с ID {recipe_id} успешно удален")
                 return True
             return False
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка удаления рецепта: {e}")
             return False
         finally:
             session.close()
@@ -1205,14 +1056,12 @@ class DataBase:
         session = self.Session()
         try:
             items = session.query(Cart).filter_by(user_id=user_id).all()
-            logger.info(f"Загружено {len(items)} элементов корзины для пользователя {user_id}")
             return [{
                 'name': item.ingredient_name,
                 'quantity': item.quantity,
                 'unit': item.unit
             } for item in items]
         except Exception as e:
-            logger.error(f"Ошибка получения корзины: {e}")
             return []
         finally:
             session.close()
@@ -1245,11 +1094,9 @@ class DataBase:
                 session.add(cart_item)
 
             session.commit()
-            logger.info(f"Добавлен элемент в корзину: {ingredient_name} - {quantity} {unit}")
             return True
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка добавления в корзину: {e}")
             return False
         finally:
             session.close()
@@ -1268,11 +1115,9 @@ class DataBase:
                 removed_count += result
 
             session.commit()
-            logger.info(f"Удалено {removed_count} элементов из корзины")
             return removed_count > 0
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка удаления из корзины: {e}")
             return False
         finally:
             session.close()
@@ -1283,11 +1128,9 @@ class DataBase:
         try:
             deleted_count = session.query(Cart).filter_by(user_id=user_id).delete()
             session.commit()
-            logger.info(f"Очищена корзина пользователя {user_id}, удалено {deleted_count} элементов")
             return True
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка очистки корзины: {e}")
             return False
         finally:
             session.close()
@@ -1303,7 +1146,6 @@ class DataBase:
                 return [(user.id, user.login, user.password)]
             return []
         except Exception as e:
-            logger.error(f"Ошибка аутентификации: {e}")
             return []
         finally:
             session.close()
@@ -1322,7 +1164,6 @@ class DataBase:
             return True, "Пользователь успешно зарегистрирован"
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка регистрации: {e}")
             return False, f"Ошибка при регистрации: {str(e)}"
         finally:
             session.close()
@@ -1348,13 +1189,11 @@ class DataBase:
                 }
             return None
         except Exception as e:
-            logger.error(f"Ошибка получения профиля: {e}")
             return None
         finally:
             session.close()
 
     # ===== МЕТОДЫ ДЛЯ РАБОТЫ С ИНГРЕДИЕНТАМИ =====
-
     def get_ingredients(self):
         """Получение всех ингредиентов"""
         session = self.Session()
@@ -1362,7 +1201,6 @@ class DataBase:
             ingredients = session.query(Ingredient).all()
             return [(ing.id, ing.name) for ing in ingredients]
         except Exception as e:
-            logger.error(f"Ошибка получения ингредиентов: {e}")
             return []
         finally:
             session.close()
@@ -1381,7 +1219,6 @@ class DataBase:
             return new_ingredient.id
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка добавления ингредиента: {e}")
             return None
         finally:
             session.close()
@@ -1415,7 +1252,6 @@ class DataBase:
             return True
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка переключения избранного: {e}")
             return False
         finally:
             session.close()
@@ -1431,7 +1267,6 @@ class DataBase:
             result = session.execute(stmt).first()
             return result is not None
         except Exception as e:
-            logger.error(f"Ошибка проверки избранного: {e}")
             return False
         finally:
             session.close()
@@ -1468,13 +1303,11 @@ class DataBase:
 
             return recipes
         except Exception as e:
-            logger.error(f"Ошибка получения избранных рецептов: {e}")
             return []
         finally:
             session.close()
 
     # ===== МЕТОДЫ ДЛЯ РАБОТЫ С ПРИГОТОВЛЕННЫМИ РЕЦЕПТАМИ =====
-
     def mark_recipe_as_cooked(self, user_id, recipe_id, cooked=True):
         """Отмечает рецепт как приготовленный или снимает отметку"""
         session = self.Session()
@@ -1495,7 +1328,6 @@ class DataBase:
             return True
         except Exception as e:
             session.rollback()
-            logger.error(f"Ошибка отметки рецепта как приготовленного: {e}")
             return False
         finally:
             session.close()
@@ -1509,7 +1341,6 @@ class DataBase:
             ).first()
             return cooked is not None
         except Exception as e:
-            logger.error(f"Ошибка проверки статуса приготовления: {e}")
             return False
         finally:
             session.close()
@@ -1539,13 +1370,11 @@ class DataBase:
                 result.append(recipe_tuple)
             return result
         except Exception as e:
-            logger.error(f"Ошибка получения приготовленных рецептов: {e}")
             return []
         finally:
             session.close()
 
     # ===== МЕТОДЫ ДЛЯ ПОИСКА =====
-
     def search_recipes(self, user_id, search_term, category_filter=None):
         """Поиск рецептов по названию или ингредиентам"""
         session = self.Session()
@@ -1588,11 +1417,9 @@ class DataBase:
 
             return result
         except Exception as e:
-            logger.error(f"Ошибка при поиске рецептов: {e}")
             return []
         finally:
             session.close()
 
     def is_favorite(self, user_id, recipe_id):
-        """Алиас для is_recipe_favorite (для совместимости)"""
         return self.is_recipe_favorite(user_id, recipe_id)

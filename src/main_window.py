@@ -1,68 +1,16 @@
-import os
-import logging  # Для логирования событий приложения
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QListWidget, QListWidgetItem, QLineEdit,
-                             QLabel, QTabWidget, QFormLayout, QCheckBox, QComboBox,
-                             QMessageBox, QSpinBox, QTextEdit, QScrollArea,
-                             QGridLayout, QFrame, QFileDialog, QToolBar, QStatusBar,
-                             QAbstractItemView, QDialog, QSpacerItem, QSizePolicy, QLayout, QCompleter)
-from PyQt6.QtCore import Qt, pyqtSignal, QSettings, QSize, QTimer, QRect, QPoint, QStringListModel
-from PyQt6.QtGui import QPixmap, QAction, QIcon, QColor
-from PyQt6.uic.properties import QtGui
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
+                             QLabel, QTabWidget, QCheckBox, QComboBox,
+                             QMessageBox, QScrollArea, QFrame, QToolBar,
+                             QDialog, QLayout, QCompleter)
+from PyQt6.QtCore import Qt, QSettings, QSize, QTimer, QRect, QPoint, QStringListModel
+from PyQt6.QtGui import QAction, QIcon
 
 from src.database import Recipe
-
-# Настройка логирования для отслеживания событий приложения
-logger = logging.getLogger(__name__)
-
 from src.modules.recipe_dialog import RecipeDialog, RecipeCardDialog
 from src.modules.settings_dialog import SettingsDialog
 from src.modules.help_dialog import HelpDialog
-from src.modules.add_ingredient_dialog import AddIngredientDialog
-
-import sys
-import os
-
-
-def resource_path(relative_path):
-    """Получает корректный путь к ресурсам в режиме exe и разработки"""
-    try:
-        # PyInstaller создает временную папку _MEIPASS
-        base_path = sys._MEIPASS
-    except AttributeError:
-        try:
-            # Альтернативный способ определения пути в PyInstaller
-            base_path = os.path.join(sys._MEIPASS2, relative_path)
-            if os.path.exists(base_path):
-                return base_path
-        except:
-            # Режим разработки
-            base_path = os.path.dirname(os.path.abspath(__file__))
-            # Поднимаемся на уровень выше (из src в корень проекта)
-            base_path = os.path.dirname(base_path)
-
-    # Строим полный путь
-    path = os.path.join(base_path, relative_path)
-
-    # Проверяем наличие файла
-    if os.path.exists(path):
-        return path
-
-    # Если не найден, пробуем альтернативные пути
-    alternative_paths = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path),
-        os.path.join(os.getcwd(), relative_path),
-        relative_path,
-    ]
-
-    for alt_path in alternative_paths:
-        if os.path.exists(alt_path):
-            return alt_path
-
-    # Если файл не найден нигде
-    logger.warning(f"Ресурс не найден: {relative_path}")
-    return None
+from src.modules.user_profile import ProfileWidget
+from src.modules.cart_manager import CartWidget
 
 
 class SmartSearchLineEdit(QLineEdit):
@@ -79,23 +27,7 @@ class SmartSearchLineEdit(QLineEdit):
         self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         self.setCompleter(self.completer)
 
-        # Ищем иконку поиска
-        icon_path = resource_path("../img/search_icon.png")
-
-        # Добавляем иконку поиска
-        self.search_icon = QLabel()
-        if icon_path and os.path.exists(icon_path):
-            pixmap = QPixmap(icon_path).scaled(16, 16)
-            self.search_icon.setPixmap(pixmap)
-        else:
-            # Используем текстовую иконку если файл не найден
-            self.search_icon.setText("🔍")
-            self.search_icon.setStyleSheet("font-size: 14px; color: #666;")
-
-        self.search_icon.setStyleSheet("padding-left: 5px;")
-
         layout = QHBoxLayout(self)
-        layout.addWidget(self.search_icon)
         layout.addStretch()
         layout.setContentsMargins(5, 0, 5, 0)
 
@@ -134,7 +66,7 @@ class FlowLayout(QLayout):
     def addItem(self, item):
         """Добавляет элемент в layout и сбрасывает кэш геометрии."""
         self._items.append(item)
-        self._geometry_cache = None  # Сброс кэша при добавлении нового элемента
+        self._geometry_cache = None
 
     def horizontalSpacing(self):
         """Возвращает значение горизонтального отступа."""
@@ -158,7 +90,7 @@ class FlowLayout(QLayout):
         """Удаляет и возвращает элемент по указанному индексу."""
         if 0 <= index < len(self._items):
             item = self._items.pop(index)
-            self._geometry_cache = None  # Сброс кэша при удалении элемента
+            self._geometry_cache = None
             return item
         return None
 
@@ -242,85 +174,16 @@ class FlowLayout(QLayout):
         self._geometry_cache = None
 
 
-# ====================================================================================
-# CartItemWidget - виджет элемента корзины с чекбоксом
-# ====================================================================================
-class CartItemWidget(QWidget):
-    """Виджет для отображения элемента корзины с возможностью выбора чекбоксом."""
-
-    def __init__(self, ingredient_name, quantity, unit, parent=None):
-        super().__init__(parent)
-        self.ingredient_name = ingredient_name  # Сохраняем название ингредиента
-        self.quantity = quantity  # Сохраняем количество
-        self.unit = unit  # Сохраняем единицу измерения
-        self.init_ui()
-
-    def init_ui(self):
-        """Инициализация пользовательского интерфейса виджета."""
-        layout = QHBoxLayout()
-        layout.setContentsMargins(10, 5, 10, 5)  # Устанавливаем отступы внутри виджета
-
-        # Создаем чекбокс для выбора элемента
-        self.checkbox = QCheckBox()
-        # Стили для чекбокса
-        self.checkbox.setStyleSheet("""
-            QCheckBox {
-                spacing: 8px;  /* Отступ между чекбоксом и текстом */
-            }
-            QCheckBox::indicator {
-                width: 16px;   /* Ширина индикатора чекбокса */
-                height: 16px;  /* Высота индикатора чекбокса */
-            }
-        """)
-
-        # Форматируем количество для красивого отображения
-        quantity_text = str(self.quantity)
-        try:
-            # Пытаемся преобразовать количество в число для форматирования
-            quantity_float = float(self.quantity)
-            if quantity_float == int(quantity_float):  # Если целое число
-                quantity_text = str(int(quantity_float))
-            else:  # Если дробное число
-                quantity_text = f"{quantity_float:.2f}"  # Округляем до 2 знаков
-        except ValueError:
-            pass  # Оставляем как есть
-
-        # Создаем метку для отображения информации об ингредиенте
-        text_label = QLabel(f"{self.ingredient_name}: {quantity_text} {self.unit}")
-        # Устанавливаем стили для метки
-        text_label.setStyleSheet("""
-            QLabel { 
-                color: #2c3e50;       /* Темно-синий цвет текста */
-                font-size: 14px;      /* Размер шрифта */
-                padding: 5px;         /* Внутренние отступы */
-            }
-        """)
-
-        # Добавляем виджеты в layout
-        layout.addWidget(self.checkbox)  # Чекбокс слева
-        layout.addWidget(text_label)  # Текст ингредиента
-        layout.addStretch()  # Растягиваемое пространство справа
-
-        self.setLayout(layout)  # Устанавливаем layout для виджета
-
-    def is_checked(self):
-        """Проверяет, отмечен ли чекбокс."""
-        return self.checkbox.isChecked()
-
-
-# ====================================================================================
-# RecipeCard - виджет карточки рецепта для главного окна
-# ====================================================================================
 class RecipeCard(QFrame):
-    """Виджет карточки рецепта"""
+    """Виджет карточки рецепта для главного окна"""
 
     def __init__(self, recipe_data, db, parent=None):
         """ Инициализация карточки рецепта. """
         super().__init__(parent)
-        self.recipe_data = recipe_data  # Сохраняем данные рецепта
+        self.recipe_data = recipe_data
         self.db = db
-        self.parent = parent  # Сохраняем родительский виджет
-        self.user_id = parent.user_id if parent else None  # Получаем ID пользователя
+        self.parent = parent
+        self.user_id = parent.user_id if parent else None
         self.init_ui()
 
     def init_ui(self):
@@ -329,7 +192,6 @@ class RecipeCard(QFrame):
         self.setMinimumHeight(280)
         self.setMaximumHeight(340)
 
-        # Устанавливаем стили для карточки
         self.setStyleSheet("""
                     QFrame {
                         background-color: white;
@@ -350,13 +212,12 @@ class RecipeCard(QFrame):
 
         # Создаем вертикальный layout для карточки
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)  # Без внутренних отступов
-        layout.setSpacing(0)  # Без отступов между элементами
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # === ВЕРХНЯЯ ЧАСТЬ: Изображение рецепта ===
         image_container = QWidget()
         image_container.setFixedHeight(150)
-        # Устанавливаем стили для контейнера изображения с градиентом
         image_container.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,  /* Вертикальный градиент */
@@ -371,25 +232,22 @@ class RecipeCard(QFrame):
         image_layout = QVBoxLayout(image_container)
         image_layout.setContentsMargins(0, 0, 0, 0)
         self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Выравнивание по центру
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Загружаем изображение рецепта из бд
         pixmap = self.db.get_recipe_image(self.recipe_data[0])
-        if pixmap and not pixmap.isNull():  # Если изображение успешно загружено
-            # Масштабируем изображение с сохранением пропорций
+        if pixmap and not pixmap.isNull():
             scaled_pixmap = pixmap.scaled(248, 148, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                           Qt.TransformationMode.SmoothTransformation)
-            self.image_label.setPixmap(scaled_pixmap)  # Устанавливаем изображение
+            self.image_label.setPixmap(scaled_pixmap)
             self.image_label.setScaledContents(True)  # Включаем масштабирование содержимого
-        else:  # Если изображение не загружено
-            # Создаем текстовую заглушку с названием рецепта
+        else:
+            # Текстовую заглушку с названием рецепта
             recipe_name = self.recipe_data[2]
-            if len(recipe_name) > 22:  # Если название слишком длинное
-                display_text = recipe_name[:22] + '...'  # Обрезаем и добавляем многоточие
+            if len(recipe_name) > 22:
+                display_text = recipe_name[:22] + '...'
             else:
                 display_text = recipe_name
 
-            # Устанавливаем стили для текстовой заглушки
             self.image_label.setText(f"🍳\n{display_text}")
             self.image_label.setStyleSheet("""
                 QLabel {
@@ -404,8 +262,8 @@ class RecipeCard(QFrame):
             """)
             self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        image_layout.addWidget(self.image_label)  # Добавляем метку изображения в layout
-        layout.addWidget(image_container)  # Добавляем контейнер изображения в основной layout
+        image_layout.addWidget(self.image_label)
+        layout.addWidget(image_container)
 
         # === ЦЕНТРАЛЬНАЯ ЧАСТЬ: Основная информация ===
         info_container = QWidget()
@@ -416,8 +274,7 @@ class RecipeCard(QFrame):
 
         # Название рецепта
         name_label = QLabel(self.recipe_data[2])
-        name_label.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Выравнивание по левому краю
-        # Устанавливаем стили для названия
+        name_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         name_label.setStyleSheet("""
             QLabel {
                 font-weight: 600;            /* Полужирный шрифт */
@@ -428,7 +285,7 @@ class RecipeCard(QFrame):
                 border-bottom: 1px solid #f1f3f4;  /* Нижняя граница */
             }
         """)
-        name_label.setWordWrap(True)  # Включение переноса слов
+        name_label.setWordWrap(True)
         name_label.setMinimumHeight(45)
         name_label.setMaximumHeight(60)
         info_layout.addWidget(name_label)
@@ -440,7 +297,7 @@ class RecipeCard(QFrame):
         meta_layout.setContentsMargins(0, 0, 0, 0)
         meta_layout.setSpacing(8)
 
-        # Информационная строка (кухня и время)
+        # кухня и время
         info_row = QHBoxLayout()
         info_row.setContentsMargins(0, 0, 0, 0)
         info_row.setSpacing(10)
@@ -492,34 +349,31 @@ class RecipeCard(QFrame):
         status_container.setFixedHeight(90)
         status_layout = QHBoxLayout(status_container)
         status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(10)  # Отступы между кнопками
+        status_layout.setSpacing(10)
 
         # Кнопка "Избранное"
         self.is_favorite = self.recipe_data[15] if len(self.recipe_data) > 15 else False
         self.favorite_btn = QPushButton("❤️" if self.is_favorite else "🤍")
-        self.favorite_btn.setFixedSize(50, 50)  # Фиксированный размер кнопки
+        self.favorite_btn.setFixedSize(50, 50)
         # Стили для кнопки избранного
         self.favorite_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;      /* Прозрачный фон */
-                border: none;                       /* Без рамки */
+                border: none;                       
                 border-radius: 2px;                /* Круглая кнопка */
                 font-size: 17px;                    /* Размер шрифта */
             }
             QPushButton:hover {
-                background-color: rgba(220, 53, 69, 0.1);  /* Красный фон при наведении */
-                transform: scale(1.1);                     /* Увеличение при наведении */
+                background-color: rgba(220, 53, 69, 0.1); 
+                transform: scale(1.1);                    
             }
         """)
-        # Подсказка в зависимости от состояния
         self.favorite_btn.setToolTip("В избранном" if self.is_favorite else "Добавить в избранное")
-        self.favorite_btn.clicked.connect(self.toggle_favorite_status)  # Подключаем обработчик
+        self.favorite_btn.clicked.connect(self.toggle_favorite_status)
 
-        # Кнопка "Приготовлено"
         self.is_cooked = self.recipe_data[16] if len(self.recipe_data) > 16 else False
         self.cooked_btn = QPushButton("✅" if self.is_cooked else "⏳")
-        self.cooked_btn.setFixedSize(50, 50)  # Фиксированный размер кнопки
-        # Стили для кнопки приготовленного
+        self.cooked_btn.setFixedSize(50, 50)
         self.cooked_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;      /* Прозрачный фон */
@@ -532,11 +386,9 @@ class RecipeCard(QFrame):
                 transform: scale(1.1);                     /* Увеличение при наведении */
             }
         """)
-        # Подсказка в зависимости от состояния
         self.cooked_btn.setToolTip("Приготовлено" if self.is_cooked else "Отметить как приготовленное")
         self.cooked_btn.clicked.connect(self.toggle_cooked_status)
 
-        # Добавляем тип блюда
         dish_type = self.recipe_data[18] if len(self.recipe_data) > 18 else "Без категории"
         dish_type_widget = QWidget()
         dish_type_widget.setFixedHeight(24)
@@ -551,7 +403,6 @@ class RecipeCard(QFrame):
         dish_type_layout = QHBoxLayout(dish_type_widget)
         dish_type_layout.setContentsMargins(6, 2, 6, 2)
 
-        # Определяем иконку в зависимости от типа блюда
         type_icons = {
             "Салаты": "🥗",
             "Десерты": "🍰",
@@ -567,20 +418,19 @@ class RecipeCard(QFrame):
         dish_type_label.setToolTip(f"Тип блюда: {dish_type}")
         dish_type_layout.addWidget(dish_type_label)
 
-        status_layout.addWidget(self.favorite_btn)  # Добавляем кнопку избранного
-        status_layout.addWidget(self.cooked_btn)  # Добавляем кнопку приготовленного
+        status_layout.addWidget(self.favorite_btn)
+        status_layout.addWidget(self.cooked_btn)
         status_layout.addWidget(dish_type_widget)
         status_layout.addStretch()
 
-        meta_layout.addWidget(status_container)  # Добавляем контейнер с кнопками в meta layout
-        info_layout.addWidget(meta_container)  # Добавляем мета-информацию в info layout
+        meta_layout.addWidget(status_container)
+        info_layout.addWidget(meta_container)
 
-        layout.addWidget(info_container)  # Добавляем info container в основной layout
+        layout.addWidget(info_container)
 
-        # === ОСНОВАНИЕ КАРТОЧКИ: Цветная полоска ===
+        # === ОСНОВАНИЕ КАРТОЧКИ ===
         bottom_line = QWidget()
-        bottom_line.setFixedHeight(4)  # Фиксированная высота
-        # Градиентная полоска внизу карточки
+        bottom_line.setFixedHeight(4)
         bottom_line.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,  /* Горизонтальный градиент */
@@ -589,22 +439,20 @@ class RecipeCard(QFrame):
                 border-bottom-right-radius: 12px;                    /* Закругление нижних углов */
             }
         """)
-        layout.addWidget(bottom_line)  # Добавляем полоску в layout
+        layout.addWidget(bottom_line)
 
-        self.setLayout(layout)  # Устанавливаем основной layout для карточки
+        self.setLayout(layout)
 
     def toggle_favorite_status(self):
         """Переключает статус избранного для рецепта."""
         try:
             if self.user_id:
-                new_status = not self.is_favorite  # Инвертируем текущий статус
+                new_status = not self.is_favorite
                 success = self.db.toggle_favorite(self.user_id, self.recipe_data[0])
 
                 if success:
-                    self.is_favorite = new_status  # Обновляем локальный статус
-                    # Обновляем иконку кнопки
+                    self.is_favorite = new_status
                     self.favorite_btn.setText("❤️" if new_status else "🤍")
-                    # Обновляем подсказку
                     self.favorite_btn.setToolTip("В избранном" if new_status else "Добавить в избранное")
 
                     # Обновляем данные в recipe_data для синхронизации
@@ -614,171 +462,37 @@ class RecipeCard(QFrame):
                         self.recipe_data = tuple(self.recipe_data)
 
                     # Обновляем статистику в профиле
-                    if self.parent:
-                        self.parent.update_profile()
+                    if self.parent and hasattr(self.parent, 'profile_widget'):
+                        self.parent.profile_widget.update_profile()
 
         except Exception as e:
-            logger.error(f"Ошибка при переключении статуса избранного: {e}")
+            print(f"Ошибка при переключении статуса избранного: {e}")
 
     def toggle_cooked_status(self):
         """Переключает статус приготовленного для рецепта."""
         try:
             if self.user_id:
-                new_status = not self.is_cooked  # Инвертируем текущий статус
+                new_status = not self.is_cooked
                 success = self.db.mark_recipe_as_cooked(self.user_id, self.recipe_data[0], new_status)
 
                 if success:
-                    self.is_cooked = new_status  # Обновляем локальный статус
-                    # Обновляем иконку кнопки
+                    self.is_cooked = new_status
                     self.cooked_btn.setText("✅" if new_status else "⏳")
-                    # Обновляем подсказку
                     self.cooked_btn.setToolTip("Приготовлено" if new_status else "Отметить как приготовленное")
 
-                    # Обновляем данные в recipe_data для синхронизации
                     if len(self.recipe_data) > 16:
                         self.recipe_data = list(self.recipe_data)
                         self.recipe_data[16] = new_status
                         self.recipe_data = tuple(self.recipe_data)
 
                     # Обновляем статистику в профиле
-                    if self.parent:
-                        self.parent.update_profile()
+                    if self.parent and hasattr(self.parent, 'profile_widget'):
+                        self.parent.profile_widget.update_profile()
 
         except Exception as e:
-            logger.error(f"Ошибка при переключении статуса приготовления: {e}")
+            print(f"Ошибка при переключении статуса приготовления: {e}")
 
     def mouseDoubleClickEvent(self, event):
-        """Обработчик двойного клика по карточке - открывает диалог просмотра рецепта."""
-        self.parent.view_recipe(self.recipe_data)
-
-
-# ====================================================================================
-# ProfileRecipeCard - карточка рецепта для профиля пользователя
-# ====================================================================================
-class ProfileRecipeCard(QFrame):
-    """Виджет карточки рецепта для отображения в профиле пользователя."""
-
-    def __init__(self, recipe_data, db, parent=None):
-        """ Инициализация карточки рецепта для профиля. """
-        super().__init__(parent)
-        self.recipe_data = recipe_data
-        self.db = db
-        self.parent = parent
-        self.user_id = parent.user_id if parent else None
-        self.init_ui()
-
-    def init_ui(self):
-        """Инициализация пользовательского интерфейса карточки профиля."""
-        self.setFixedSize(180, 220)
-        # Устанавливаем стили для карточки с тенями
-        self.setStyleSheet("""
-            QFrame {
-                background-color: white;                    /* Белый фон */
-                border: none;                               /* Без рамки */
-                border-radius: 10px;                        /* Закругленные углы */
-                margin: 5px;                                /* Внешние отступы */
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); /* Легкая тень */
-                transition: all 0.2s ease;                  /* Плавный переход */
-            }
-            QFrame:hover {
-                box-shadow: 0 4px 15px rgba(52, 152, 219, 0.12);  /* Усиленная тень при наведении */
-                transform: translateY(-2px);                /* Легкий подъем при наведении */
-            }
-        """)
-
-        # Создаем вертикальный layout
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        # Контейнер для изображения
-        image_container = QWidget()
-        image_container.setFixedHeight(120)
-        # Стили для контейнера изображения с градиентом
-        image_container.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,  /* Вертикальный градиент */
-                    stop:0 #f5f7fa, stop:1 #e4e7eb);                /* От светлого к темному серому */
-                border-top-left-radius: 10px;                        /* Закругление верхних углов */
-                border-top-right-radius: 10px;                       /* Закругление верхних углов */
-                border-bottom: 1px solid #e9ecef;                    /* Нижняя граница */
-            }
-        """)
-
-        # Layout для изображения
-        image_layout = QVBoxLayout(image_container)
-        image_layout.setContentsMargins(0, 0, 0, 0)
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Загружаем изображение рецепта
-        pixmap = self.db.get_recipe_image(self.recipe_data[0])
-        if pixmap and not pixmap.isNull():  # Если изображение загружено
-            # Масштабируем изображение
-            scaled_pixmap = pixmap.scaled(178, 118, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                          Qt.TransformationMode.SmoothTransformation)
-            image_label.setPixmap(scaled_pixmap)  # Устанавливаем изображение
-            image_label.setScaledContents(True)  # Включаем масштабирование
-        else:  # Если изображение не загружено
-            image_label.setText("🍳")  # Текстовая иконка
-            image_label.setStyleSheet("font-size: 32px; color: #6c757d;")  # Стили для иконки
-
-        image_layout.addWidget(image_label)
-        layout.addWidget(image_container)
-
-        # Контейнер для информации
-        info_container = QWidget()
-        info_container.setStyleSheet("background-color: white;")
-        info_layout = QVBoxLayout(info_container)
-        info_layout.setContentsMargins(12, 12, 12, 12)
-        info_layout.setSpacing(8)
-
-        # Название рецепта
-        name_label = QLabel(self.recipe_data[2])
-        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Стили для названия
-        name_label.setStyleSheet("""
-            QLabel {
-                font-size: 12px;             /* Размер шрифта */
-                font-weight: 500;            /* Средняя жирность */
-                color: #2c3e50;              /* Темно-синий цвет */
-                line-height: 1.3;            /* Межстрочный интервал */
-            }
-        """)
-        name_label.setWordWrap(True)  # Включение переноса слов
-        name_label.setMaximumHeight(40)
-        info_layout.addWidget(name_label)
-
-        # Контейнер для статусов (избранное/приготовлено)
-        status_container = QWidget()
-        status_container.setFixedHeight(20)
-        status_layout = QHBoxLayout(status_container)
-        status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(5)
-
-        # Проверяем статусы рецепта
-        is_cooked = len(self.recipe_data) > 16 and self.recipe_data[16]
-        is_favorite = self.recipe_data[15] if len(self.recipe_data) > 15 else False
-
-        if is_cooked:  # Если рецепт приготовлен
-            cooked_icon = QLabel("✅")
-            cooked_icon.setStyleSheet("font-size: 10px;")
-            status_layout.addWidget(cooked_icon)
-
-        if is_favorite:  # Если рецепт в избранном
-            favorite_icon = QLabel("❤️")
-            favorite_icon.setStyleSheet("font-size: 10px;")
-            status_layout.addWidget(favorite_icon)
-
-        status_layout.addStretch()  # Растягиваемое пространство
-        info_layout.addWidget(status_container)
-
-        layout.addWidget(info_container)
-
-        self.setLayout(layout)
-
-    def mouseDoubleClickEvent(self, event):
-        """Обработчик двойного клика по карточке - открывает диалог просмотра рецепта."""
         self.parent.view_recipe(self.recipe_data)
 
 
@@ -812,9 +526,6 @@ class AutoCompleteComboBox(QComboBox):
         return self.currentText()
 
 
-# ====================================================================================
-# MainWindow - главное окно приложения
-# ====================================================================================
 class MainWindow(QMainWindow):
     """Главное окно приложения с вкладками рецептов, профиля и корзины."""
 
@@ -825,10 +536,8 @@ class MainWindow(QMainWindow):
         self.logout_callback = logout_callback
 
         self.settings = QSettings("PuzzleVkusov", "AppSettings")
-        self.cart = self.db.get_cart_items(user_id)
         self.current_recipe_cards = []
 
-        # Таймер для отложенной фильтрации
         self.filter_timer = QTimer()
         self.filter_timer.setSingleShot(True)
         self.filter_timer.timeout.connect(self.load_recipes)
@@ -837,15 +546,12 @@ class MainWindow(QMainWindow):
         self.load_initial_settings()
         self.load_recipes()
         self.update_profile()
-        self.update_cart_display()
 
     def init_ui(self):
-        """Инициализация пользовательского интерфейса главного окна."""
         self.setWindowTitle("Пазл Вкусов")
-        self.setGeometry(100, 100, 1200, 850)
-        self.setWindowIcon(QIcon(resource_path("img/icon.ico")))
+        self.setMinimumSize(1200, 850)
+        self.setWindowIcon(QIcon("../img/icon.ico"))
 
-        # Загружаем настройки шрифтов
         font_size = self.settings.value("font_size", 14, type=int)
         title_font_size = self.settings.value("title_font_size", 16, type=int)
 
@@ -956,11 +662,6 @@ class MainWindow(QMainWindow):
         refresh_btn = QPushButton("🔄 Обновить")
         refresh_btn.clicked.connect(self.load_recipes)
 
-        # Кнопка принудительного обновления БД
-        force_refresh_btn = QPushButton("🔧 Исправить БД")
-        force_refresh_btn.clicked.connect(self.fix_database)
-        force_refresh_btn.setStyleSheet("background-color: #ffc107;")
-
         recipes_control_layout.addWidget(add_recipe_btn)
         recipes_control_layout.addWidget(refresh_btn)
         recipes_control_layout.addStretch()
@@ -970,7 +671,7 @@ class MainWindow(QMainWindow):
         self.recipes_scroll = QScrollArea()
         self.recipes_scroll.setWidgetResizable(True)
         self.recipes_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # убираем горизонтальную прокрутку
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.recipes_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         # Главный контейнер для всех рецептов
@@ -978,7 +679,7 @@ class MainWindow(QMainWindow):
         self.recipes_container_layout = QVBoxLayout(self.recipes_container)
         self.recipes_container_layout.setSpacing(20)
         self.recipes_container_layout.setContentsMargins(10, 10, 10, 10)
-        self.recipes_container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Выравнивание по верху
+        self.recipes_container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.recipes_scroll.setWidget(self.recipes_container)
 
@@ -1004,75 +705,34 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        recipes_layout.addWidget(self.recipes_scroll, 1)  # 1 для растяжения
+        recipes_layout.addWidget(self.recipes_scroll, 1)
 
         # === ВКЛАДКА ПРОФИЛЯ ===
-        profile_tab = QWidget()
-        profile_layout = QVBoxLayout()
-        self.setup_profile_tab(profile_layout)
-        profile_tab.setLayout(profile_layout)
+        self.profile_widget = ProfileWidget(self.db, self.user_id, self)
 
         # === ВКЛАДКА КОРЗИНЫ ===
-        cart_tab = QWidget()
-        cart_layout = QVBoxLayout()
-        self.setup_cart_tab(cart_layout)
-        cart_tab.setLayout(cart_layout)
+        self.cart_widget = CartWidget(self.db, self.user_id, self)
 
         self.tabs.addTab(recipes_tab, "📖 Рецепты")
-        self.tabs.addTab(profile_tab, "👤 Профиль")
-        self.tabs.addTab(cart_tab, "🛒 Корзина")
+        self.tabs.addTab(self.profile_widget, "👤 Профиль")
+        self.tabs.addTab(self.cart_widget, "🛒 Корзина")
 
-        layout.addWidget(self.tabs, 1)  # Tabs тоже растягиваются
+        layout.addWidget(self.tabs, 1)
         central_widget.setLayout(layout)
 
-        self.statusBar = QStatusBar()
-        self.setStatusBar(self.statusBar)
-        self.statusBar.showMessage("Готово", 3000)  # Показываем начальное сообщение на 3 секунды
-
-    def fix_database(self):
-        """Исправление проблем с базой данных"""
-        try:
-            reply = QMessageBox.question(
-                self,
-                "Исправление БД",
-                "Принудительно пересоздаст изображения и проверит рецепты.\nПродолжить?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                # Принудительно назначаем изображения
-                self.db.assign_unique_images_to_recipes()
-
-                # Проверяем статус
-                self.db.check_image_status()
-
-                # Обновляем отображение
-                self.load_recipes()
-                self.update_profile()
-
-                QMessageBox.information(self, "Готово", "База данных исправлена!")
-
-        except Exception as e:
-            logger.error(f"Ошибка при исправлении БД: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
-
     def load_initial_settings(self):
-        """Загружает начальные настройки приложения при запуске."""
+        # Загружает начальные настройки приложения при запуске
         try:
-            # Загружаем размер шрифта из настроек (по умолчанию 14)
             font_size = self.settings.value("font_size", 14, type=int)
-            # Загружаем размер шрифта заголовков (по умолчанию 16)
             title_font_size = self.settings.value("title_font_size", 16, type=int)
-            self.update_styles(font_size, title_font_size)  # Применяем стили
+            self.update_styles(font_size, title_font_size)
         except Exception as e:
-            logger.error(f"Ошибка загрузки начальных настроек: {e}")
+            print(f"Ошибка загрузки начальных настроек: {e}")
 
     def create_toolbar(self):
-        """Создает панель инструментов с иконками в верхней части окна."""
-        # Создаем панель инструментов
+        # Создает панель инструментов с иконками в верхней части окна
         toolbar = QToolBar("Главное меню")
-        toolbar.setMovable(False)  # Запрещаем перетаскивание панели
-        # Устанавливаем стили для панели инструментов
+        toolbar.setMovable(False)
         toolbar.setStyleSheet("""
             QToolBar {
                 background-color: #f8f9fa;          /* Светло-серый фон */
@@ -1090,175 +750,34 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Функция для создания действий с иконками
         def create_action(icon_name, fallback_text, tooltip, callback):
             """Создает действие с иконкой или текстовой заменой."""
-            icon_path = resource_path(f"img/{icon_name}")
-            if icon_path and os.path.exists(icon_path):
+            icon_path = f"../img/{icon_name}"
+            if icon_path:
                 action = QAction(QIcon(icon_path), "", self)
             else:
                 action = QAction(fallback_text, self)
-                logger.warning(f"Иконка {icon_name} не найдена")
 
             action.triggered.connect(callback)
             action.setToolTip(tooltip)
             action.setStatusTip(tooltip)
             return action
 
-        # Создаем действие для кнопки "Настройки"
         settings_action = create_action("settings_icon.png", "⚙️", "Настройки приложения", self.open_settings)
         help_action = create_action("help_icon.png", "❓", "Справка", self.open_help)
         refresh_action = create_action("refresh_icon.png", "🔄", "Обновить данные", self.refresh_data)
 
-        # Добавляем действия на панель инструментов
         toolbar.addAction(settings_action)
         toolbar.addAction(help_action)
         toolbar.addAction(refresh_action)
 
-        # Добавляем панель инструментов в главное окно
         self.addToolBar(toolbar)
         toolbar.setIconSize(QSize(24, 24))
 
-    def setup_profile_tab(self, layout):
-        """Настраивает содержимое вкладки профиля пользователя."""
-
-        # Простое поле с информацией о пользователе
-        self.profile_info = QLabel()
-        # Устанавливаем стили для информации профиля
-        self.profile_info.setStyleSheet("""
-            QLabel {
-                font-size: 16px;           /* Размер шрифта */
-                color: #495057;            /* Темно-серый цвет */
-                background-color: white;   /* Белый фон */
-                padding: 15px;             /* Внутренние отступы */
-                border-radius: 8px;        /* Закругленные углы */
-                border: 1px solid #dee2e6; /* Серая рамка */
-                min-height: 60px;          /* Минимальная высота */
-            }
-        """)
-        self.profile_info.setWordWrap(True)  # Включение переноса слов
-
-        layout.addWidget(self.profile_info)  # Добавляем виджет
-
-        # Статистика
-        stats_group = QLabel("📊 Статистика")
-        stats_group.setStyleSheet("""
-            font-size: 16px;           /* Размер шрифта */
-            font-weight: bold;         /* Жирный шрифт */
-            color: #2c3e50;            /* Темно-синий цвет */
-            margin-top: 20px;          /* Верхний отступ */
-        """)
-        layout.addWidget(stats_group)
-
-        self.stats_label = QLabel()
-        self.stats_label.setStyleSheet("""
-            QLabel {
-                font-size: 14px;           /* Размер шрифта */
-                color: #495057;            /* Темно-серый цвет */
-                background-color: white;   /* Белый фон */
-                padding: 20px;             /* Внутренние отступы */
-                border-radius: 8px;        /* Закругленные углы */
-                border: 1px solid #dee2e6; /* Серая рамка */
-                min-height: 120px;         /* Минимальная высота */
-            }
-        """)
-        self.stats_label.setWordWrap(True)
-        layout.addWidget(self.stats_label)
-
-        # Избранные рецепты
-        favorites_label = QLabel("❤️ Избранные рецепты")
-        favorites_label.setStyleSheet("""
-            font-size: 16px;                
-            font-weight: 600;               
-            color: #2c3e50;                 
-            margin-top: 20px;                
-            padding-bottom: 8px;             
-            border-bottom: 2px solid #e9ecef; 
-        """)
-        layout.addWidget(favorites_label)
-
-        self.favorites_scroll = QScrollArea()
-        self.favorites_widget = QWidget()
-        self.favorites_layout = QHBoxLayout(self.favorites_widget)
-        self.favorites_layout.setSpacing(10)
-        self.favorites_layout.setContentsMargins(15, 10, 15, 10)
-        self.favorites_layout.addStretch(1)
-
-        self.favorites_scroll.setWidget(self.favorites_widget)
-        self.favorites_scroll.setWidgetResizable(True)
-        self.favorites_scroll.setFixedHeight(270)
-        self.favorites_scroll.setStyleSheet("""
-            QScrollArea {
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                background-color: #f8f9fa;
-            }
-            QScrollArea > QWidget > QWidget {
-                background-color: transparent;
-            }
-        """)
-        layout.addWidget(self.favorites_scroll)
-
-        # Приготовленные рецепты
-        cooked_label = QLabel("✅ Приготовленные рецепты")
-        cooked_label.setStyleSheet("""
-            font-size: 16px;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-top: 20px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #e9ecef;
-        """)
-        layout.addWidget(cooked_label)
-
-        self.cooked_scroll = QScrollArea()
-        self.cooked_widget = QWidget()
-        self.cooked_layout = QHBoxLayout(self.cooked_widget)
-        self.cooked_layout.setSpacing(10)
-        self.cooked_layout.setContentsMargins(15, 10, 15, 10)
-        self.cooked_layout.addStretch(1)
-
-        self.cooked_scroll.setWidget(self.cooked_widget)
-        self.cooked_scroll.setWidgetResizable(True)
-        self.cooked_scroll.setFixedHeight(270)
-        self.cooked_scroll.setStyleSheet("""
-            QScrollArea {
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                background-color: #f8f9fa;
-            }
-            QScrollArea > QWidget > QWidget {
-                background-color: transparent;
-            }
-        """)
-        layout.addWidget(self.cooked_scroll)
-
-        # Кнопка выхода
-        logout_layout = QHBoxLayout()
-        logout_btn = QPushButton("🚪 Выйти из аккаунта")
-        logout_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #dc3545;
-                color: white;
-                padding: 12px 24px;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 14px;
-                margin-top: 20px;
-            }
-            QPushButton:hover {
-                background-color: #c82333;
-            }
-        """)
-        logout_btn.clicked.connect(self.logout)
-        logout_layout.addWidget(logout_btn)
-        logout_layout.addStretch()
-        layout.addLayout(logout_layout)
-
     def setup_recipe_filters(self, layout):
-        """Настраивает панель фильтрации рецептов с чекбоксами для ингредиентов"""
+        # Настраивает панель фильтрации рецептов с чекбоксами для ингредиентов
         filters_container = QWidget()
-        filters_container.setFixedHeight(150)  # Увеличиваем высоту
+        filters_container.setFixedHeight(150)
         filters_container.setStyleSheet("""
             QWidget {
                 background-color: white;
@@ -1270,11 +789,10 @@ class MainWindow(QMainWindow):
         filters_layout = QVBoxLayout(filters_container)
         filters_layout.setContentsMargins(15, 10, 15, 10)
 
-        # Первая строка фильтров (основные)
+        # Первая строка фильтров
         row1_layout = QHBoxLayout()
         row1_layout.setSpacing(10)
 
-        # Кухня
         row1_layout.addWidget(QLabel("Кухня:"))
         self.cuisine_filter = QComboBox()
         self.cuisine_filter.setMinimumWidth(150)
@@ -1283,7 +801,6 @@ class MainWindow(QMainWindow):
         self.cuisine_filter.currentTextChanged.connect(lambda: self.apply_filters(immediate=True))
         row1_layout.addWidget(self.cuisine_filter)
 
-        # Время приготовления
         row1_layout.addWidget(QLabel("Время:"))
         self.time_filter = QComboBox()
         self.time_filter.setMinimumWidth(120)
@@ -1291,7 +808,6 @@ class MainWindow(QMainWindow):
         self.time_filter.currentTextChanged.connect(lambda: self.apply_filters(immediate=True))
         row1_layout.addWidget(self.time_filter)
 
-        # Чекбоксы
         self.favorites_only = QCheckBox("Только избранное")
         self.favorites_only.stateChanged.connect(lambda: self.apply_filters(immediate=True))
         row1_layout.addWidget(self.favorites_only)
@@ -1303,18 +819,16 @@ class MainWindow(QMainWindow):
         row1_layout.addStretch()
         filters_layout.addLayout(row1_layout)
 
-        # Вторая строка фильтров (поиск)
+        # Вторая строка поиск
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(10)
 
-        # Поиск по названию рецепта
         row2_layout.addWidget(QLabel("Название:"))
         self.name_filter = SmartSearchLineEdit()
         self.name_filter.setMinimumWidth(250)
         self.name_filter.textChanged.connect(lambda: self.apply_filters(debounced=True))
         self.load_search_suggestions()
 
-        # Кнопка очистки для названия
         clear_name_btn = QPushButton("🗑️")
         clear_name_btn.setFixedSize(50, 40)
         clear_name_btn.setToolTip("Очистить поле названия")
@@ -1326,13 +840,12 @@ class MainWindow(QMainWindow):
 
         filters_layout.addLayout(row2_layout)
 
-        # Третья строка - фильтр по ингредиентам с чекбоксами
+        # Третья строка - фильтр по ингредиентам
         row3_layout = QHBoxLayout()
         row3_layout.setSpacing(10)
 
         row3_layout.addWidget(QLabel("Ингредиенты:"))
 
-        # Создаем виджет для чекбоксов ингредиентов
         self.ingredients_filter_container = QWidget()
         self.ingredients_filter_container.setStyleSheet("""
             QWidget {
@@ -1343,12 +856,10 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Горизонтальный layout для чекбоксов
         self.ingredients_checkbox_layout = QHBoxLayout(self.ingredients_filter_container)
         self.ingredients_checkbox_layout.setSpacing(10)
         self.ingredients_checkbox_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Кнопка открытия списка ингредиентов
         self.ingredient_filter_btn = QPushButton("📋 Выбрать ингредиенты")
         self.ingredient_filter_btn.clicked.connect(self.show_ingredients_selection)
         self.ingredient_filter_btn.setStyleSheet("""
@@ -1364,14 +875,13 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Кнопка очистки выбора ингредиентов
         clear_ingredients_btn = QPushButton("🗑️")
         clear_ingredients_btn.setFixedSize(50, 40)
         clear_ingredients_btn.setToolTip("Очистить выбор ингредиентов")
         clear_ingredients_btn.clicked.connect(self.clear_ingredients_filter)
 
         row3_layout.addWidget(self.ingredient_filter_btn)
-        row3_layout.addWidget(self.ingredients_filter_container, 1)  # Растягиваем
+        row3_layout.addWidget(self.ingredients_filter_container, 1)
         row3_layout.addWidget(clear_ingredients_btn)
 
         filters_layout.addLayout(row3_layout)
@@ -1379,7 +889,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(filters_container)
 
     def show_ingredients_selection(self):
-        """Показывает диалог выбора ингредиентов"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Выбор ингредиентов для фильтрации")
         dialog.setModal(True)
@@ -1387,7 +896,6 @@ class MainWindow(QMainWindow):
 
         layout = QVBoxLayout(dialog)
 
-        # Поле поиска ингредиентов
         search_layout = QHBoxLayout()
         search_input = QLineEdit()
         search_input.setPlaceholderText("Поиск ингредиентов...")
@@ -1403,7 +911,6 @@ class MainWindow(QMainWindow):
         # Загружаем ингредиенты
         self.load_ingredients_for_checkboxes()
 
-        # Кнопки
         button_layout = QHBoxLayout()
         select_all_btn = QPushButton("Выбрать все")
         select_all_btn.clicked.connect(self.select_all_ingredients)
@@ -1453,7 +960,7 @@ class MainWindow(QMainWindow):
             self.ingredients_list_layout.addStretch()
 
         except Exception as e:
-            logger.error(f"Ошибка загрузки ингредиентов для чекбоксов: {e}")
+            print(f"Ошибка загрузки ингредиентов для чекбоксов: {e}")
 
     def select_all_ingredients(self):
         """Выбирает все ингредиенты"""
@@ -1474,7 +981,6 @@ class MainWindow(QMainWindow):
             if checkbox.isChecked():
                 selected_ingredients.append(ing_name)
 
-        # Обновляем отображение выбранных ингредиентов
         self.update_selected_ingredients_display(selected_ingredients)
 
         dialog.accept()
@@ -1539,16 +1045,13 @@ class MainWindow(QMainWindow):
             # Устанавливаем подсказки
             self.name_filter.set_search_suggestions(recipe_names)
 
-            logger.info(f"Загружено {len(recipe_names)} подсказок для поиска")
-
         except Exception as e:
-            logger.error(f"Ошибка загрузки подсказок для поиска: {e}")
+            print(f"Ошибка загрузки подсказок для поиска: {e}")
 
     def load_cuisines_to_filter(self):
         """Загружает список кухонь в фильтр"""
         try:
             cuisines = self.db.get_cuisines()
-            logger.info(f"Загружено кухонь из базы: {len(cuisines)}")
 
             self.cuisine_filter.clear()
             self.cuisine_filter.addItem("Любая кухня")
@@ -1563,7 +1066,7 @@ class MainWindow(QMainWindow):
                     self.cuisine_filter.addItem(cuisine)
 
         except Exception as e:
-            logger.error(f"Ошибка загрузки кухонь: {e}")
+            print(f"Ошибка загрузки кухонь: {e}")
 
     def clear_ingredients_filter(self):
         """Очищает выбор ингредиентов"""
@@ -1594,13 +1097,10 @@ class MainWindow(QMainWindow):
         self.ingredient_filter.lineEdit().clear()
         self.name_filter.clear()
         self.load_recipes()
-        self.statusBar.showMessage("Фильтры сброшены", 2000)
 
     def load_recipes(self):
         """Загружает рецепты с учетом фильтров и группирует по типам блюд"""
         try:
-            logger.info("=== ЗАГРУЗКА РЕЦЕПТОВ ===")
-
             # Получаем значения фильтров
             cuisine = self.cuisine_filter.currentText()
             if cuisine == "Любая кухня":
@@ -1626,10 +1126,6 @@ class MainWindow(QMainWindow):
 
             name_filter = self.name_filter.text().strip()
 
-            logger.info(f"Активные фильтры: кухня={cuisine}, время={max_time}, "
-                        f"избранное={favorites_only}, приготовлено={cooked_only}, "
-                        f"ингредиенты={ingredient_filter}, название={name_filter}")
-
             # Получаем сгруппированные рецепты
             grouped_recipes = self.db.get_recipes_with_filters(
                 self.user_id,
@@ -1643,27 +1139,19 @@ class MainWindow(QMainWindow):
 
             # Проверяем, что grouped_recipes не является None
             if grouped_recipes is None:
-                logger.error("Ошибка: grouped_recipes равен None")
                 grouped_recipes = {}
 
-            logger.info(f"Найдено групп: {len(grouped_recipes)}")
-
-            # Отображаем рецепты по категориям
             self.display_recipes_by_category(grouped_recipes)
 
-            # После загрузки рецептов обновляем подсказки
             self.load_search_suggestions()
 
         except Exception as e:
-            logger.error(f"Ошибка при загрузке рецептов: {e}", exc_info=True)
             self.show_error_message(f"Ошибка загрузки рецептов: {str(e)}")
 
     def display_recipes_by_category(self, grouped_recipes):
         """Отображает рецепты, сгруппированные по категориям"""
-        # Полностью очищаем контейнер
         self.clear_recipe_container()
 
-        # Если рецептов нет
         if not grouped_recipes:
             self.show_no_recipes_message()
             return
@@ -1699,10 +1187,7 @@ class MainWindow(QMainWindow):
                 total_recipes += len(recipes)
                 self.create_category_section(category, recipes)
 
-        # Добавляем растягивающийся спейсер в конец
         self.recipes_container_layout.addStretch()
-
-        self.statusBar.showMessage(f"Загружено рецептов: {total_recipes}", 3000)
 
     def create_category_section(self, category, recipes):
         """Создает секцию для категории с рецептами"""
@@ -1772,7 +1257,6 @@ class MainWindow(QMainWindow):
         self.recipes_container_layout.addWidget(category_section)
 
     def get_category_icon(self, category):
-        """Возвращает иконку для категории"""
         icons = {
             "Салаты": "🥗",
             "Десерты": "🍰",
@@ -1788,7 +1272,6 @@ class MainWindow(QMainWindow):
 
     def clear_recipe_container(self):
         """Очищает контейнер рецептов"""
-        # Очищаем layout контейнера
         while self.recipes_container_layout.count():
             item = self.recipes_container_layout.takeAt(0)
             if item and item.widget():
@@ -1949,22 +1432,19 @@ class MainWindow(QMainWindow):
     def load_cuisines(self):
         """Загружает список кухонь из базы данных"""
         try:
-            cuisines = self.db.get_cuisines()  # Получаем список кухонь
+            cuisines = self.db.get_cuisines()
             self.cuisine_filter.clear()
             self.cuisine_filter.addItem("Любая кухня")
 
             for cuisine_id, cuisine_name in cuisines:
                 self.cuisine_filter.addItem(cuisine_name)
 
-        except Exception as e:
-            logger.error(f"Ошибка загрузки кухонь: {e}")
-            # Используем фиксированный список в случае ошибки
+        except Exception:
             self.cuisine_filter.addItems(["Любая кухня", "Русская", "Итальянская", "Японская",
                                           "Китайская", "Мексиканская", "Французская", "Американская"])
 
     def logout(self):
-        """Обрабатывает выход пользователя из аккаунта с подтверждением."""
-        # диалог подтверждения выхода
+        """ Обрабатывает выход пользователя """
         reply = QMessageBox.question(
             self,
             "Подтверждение выхода",
@@ -1972,246 +1452,22 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
-        # Если пользователь подтвердил выход
         if reply == QMessageBox.StandardButton.Yes:
             self.logout_callback()
 
-    def setup_cart_tab(self, layout):
-        """Настраивает содержимое вкладки корзины покупок."""
-        cart_header = QLabel("🛒 Корзина ингредиентов")
-        cart_header.setStyleSheet("""
-            font-size: 18px;           /* Размер шрифта */
-            font-weight: bold;         /* Жирный шрифт */
-            color: #2c3e50;            /* Темно-синий цвет */
-            margin-bottom: 15px;       /* Нижний отступ */
-        """)
-        layout.addWidget(cart_header)
-
-        # Layout для кнопок управления корзиной
-        cart_buttons_layout = QHBoxLayout()
-
-        # Кнопка добавления нового ингредиента
-        add_ingredient_btn = QPushButton("➕ Добавить ингредиент")
-        add_ingredient_btn.clicked.connect(self.show_add_ingredient_dialog)
-
-        # Кнопка очистки всей корзины
-        clear_cart_btn = QPushButton("🗑️ Очистить корзину")
-        clear_cart_btn.clicked.connect(self.clear_cart)
-
-        # Кнопка удаления выбранных элементов
-        remove_selected_btn = QPushButton("❌ Удалить выбранные")
-        remove_selected_btn.clicked.connect(self.remove_selected_items)
-
-        # Кнопка экспорта списка покупок
-        export_cart_btn = QPushButton("📄 Экспорт списка")
-        export_cart_btn.clicked.connect(self.export_cart)
-
-        # Добавляем все кнопки в layout
-        cart_buttons_layout.addWidget(add_ingredient_btn)
-        cart_buttons_layout.addWidget(clear_cart_btn)
-        cart_buttons_layout.addWidget(remove_selected_btn)
-        cart_buttons_layout.addWidget(export_cart_btn)
-        cart_buttons_layout.addStretch()
-
-        layout.addLayout(cart_buttons_layout)
-
-        # Создаем список для отображения элементов корзины
-        self.cart_list = QListWidget()
-        # Устанавливаем режим выбора - без выбора элементов (используем чекбоксы)
-        self.cart_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        # Устанавливаем стили для списка корзины
-        self.cart_list.setStyleSheet("""
-            QListWidget {
-                font-size: 14px;           /* Размер шрифта */
-                background-color: white;   /* Белый фон */
-                border: 1px solid #dee2e6; /* Серая рамка */
-                border-radius: 8px;        /* Закругленные углы */
-                padding: 5px;              /* Внутренние отступы */
-            }
-            QListWidget::item {
-                padding: 0px;              /* Без отступов у элементов */
-                border-bottom: 1px solid #f1f3f4; /* Разделитель между элементами */
-            }
-            QListWidget::item:last {
-                border-bottom: none;       /* У последнего элемента нет разделителя */
-            }
-        """)
-        layout.addWidget(self.cart_list)
-
-    def show_add_ingredient_dialog(self):
-        """Показывает диалоговое окно для добавления нового ингредиента в корзину."""
-        dialog = AddIngredientDialog(self.db, self)
-        # Если диалог был принят (пользователь нажал OK)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            ingredient_data = dialog.get_ingredient_data()  # Получаем данные ингредиента
-            if ingredient_data:
-                # Добавляем ингредиент в локальную корзину
-                self.cart.append({
-                    'name': ingredient_data['name'],
-                    'quantity': ingredient_data['quantity'],
-                    'unit': ingredient_data['unit']
-                })
-                self.update_cart_display()  # Обновляем отображение корзины
-                self.update_profile()  # Обновляем профиль (статистику)
-
-    def add_to_cart(self, ingredients):
-        """Добавляет ингредиенты рецепта в корзину и сохраняет в базу данных."""
-        try:
-            success_count = 0  # Счетчик успешно добавленных ингредиентов
-            # Проходим по всем ингредиентам рецепта
-            for name, quantity, unit in ingredients:
-                # Добавляем каждый ингредиент в бд
-                success = self.db.add_cart_item(
-                    self.user_id, name, quantity, unit
-                )
-                if success:
-                    success_count += 1  # Увеличиваем счетчик при успешном добавлении
-
-            # Если хотя бы один ингредиент был добавлен успешно
-            if success_count > 0:
-                # Обновляем локальную корзину из базы данных
-                self.cart = self.db.get_cart_items(self.user_id)
-                self.update_cart_display()  # Обновляем отображение корзины
-                self.update_profile()  # Обновляем профиль
-                # Показываем сообщение об успехе
-                QMessageBox.information(self, "Успех", f"Добавлено {success_count} ингредиентов в корзину!")
-            else:
-                # Показываем сообщение об ошибке
-                QMessageBox.warning(self, "Ошибка", "Не удалось добавить ингредиенты в корзину")
-
-        except Exception as e:
-            logger.error(f"Ошибка добавления в корзину: {e}")
-            QMessageBox.critical(self, "Ошибка", "Не удалось добавить в корзину")
-
-    def remove_selected_items(self):
-        """Удаляет выбранные элементы из корзины (из базы данных)."""
-        try:
-            items_to_remove = []  # Список элементов для удаления
-            # Проходим по всем элементам в списке корзины
-            for i in range(self.cart_list.count()):
-                item = self.cart_list.item(i)  # Получаем элемент списка
-                widget = self.cart_list.itemWidget(item)  # Получаем виджет элемента
-                if widget and widget.is_checked():  # Если виджет существует и выбран
-                    # Добавляем данные элемента в список для удаления
-                    items_to_remove.append({
-                        'name': widget.ingredient_name,
-                        'unit': widget.unit
-                    })
-
-            # Если есть элементы для удаления
-            if items_to_remove:
-                # Удаляем элементы из базы данных
-                success = self.db.remove_cart_items(self.user_id, items_to_remove)
-                if success:
-                    # Обновляем локальную корзину из базы данных
-                    self.cart = self.db.get_cart_items(self.user_id)
-                    self.update_cart_display()  # Обновляем отображение корзины
-                    self.update_profile()  # Обновляем профиль
-                    QMessageBox.information(self, "Успех", f"Удалено {len(items_to_remove)} ингредиентов")
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Не удалось удалить элементы из корзины")
-            else:
-                QMessageBox.information(self, "Информация", "Не выбраны ингредиенты для удаления")
-
-        except Exception as e:
-            logger.error(f"Ошибка удаления из корзину: {e}")
-            QMessageBox.critical(self, "Ошибка", "Не удалось удалить элементы")
-
-    def clear_cart(self):
-        """Очищает всю корзину пользователя (из базы данных)."""
-        try:
-            # Если корзина уже пуста
-            if not self.cart:
-                QMessageBox.information(self, "Информация", "Корзина уже пуста")
-                return
-
-            # Показываем диалог подтверждения очистки
-            reply = QMessageBox.question(
-                self,
-                "Подтверждение",
-                "Вы действительно хотите очистить корзину?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-
-            # Если пользователь подтвердил очистку
-            if reply == QMessageBox.StandardButton.Yes:
-                # Очищаем корзину в базе данных
-                success = self.db.clear_cart(self.user_id)
-                if success:
-                    # Очищаем локальную корзину
-                    self.cart = []
-                    self.update_cart_display()  # Обновляем отображение
-                    self.update_profile()  # Обновляем профиль
-                    # Показываем сообщение об успехе
-                    QMessageBox.information(self, "Успех", "Корзина очищена!")
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Не удалось очистить корзину")
-
-        except Exception as e:
-            logger.error(f"Ошибка очистки корзины: {e}")
-            QMessageBox.critical(self, "Ошибка", "Не удалось очистить корзину")
-
-    def update_cart_display(self):
-        """Обновляет отображение корзины с данными из базы данных."""
-        self.cart_list.clear()  # Очищаем список корзины
-
-        # Если корзина пуста
-        if not self.cart:
-            # Создаем элемент списка с сообщением о пустой корзине
-            empty_item = QListWidgetItem("🛒 Корзина пуста")
-            empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsSelectable)  # Запрещаем выбор
-            empty_item.setForeground(QColor(108, 117, 125))  # Серый цвет текста
-            self.cart_list.addItem(empty_item)  # Добавляем элемент в список
-            return
-
-        # Группируем ингредиенты по названию и единице измерения
-        ingredient_groups = {}
-        for item in self.cart:
-            name = item['name']
-            quantity = item['quantity']
-            unit = item['unit']
-            key = (name, unit)  # Ключ для группировки - название + единица измерения
-
-            if key in ingredient_groups:  # Если такой ингредиент уже есть
-                # Пытаемся сложить количества
-                try:
-                    # Преобразуем существующее количество в число
-                    existing_qty = float(ingredient_groups[key]) if str(ingredient_groups[key]).replace('.',
-                                                                                                        '').isdigit() else 0
-                    # Преобразуем новое количество в число
-                    new_qty = float(quantity) if str(quantity).replace('.', '').isdigit() else 0
-                    ingredient_groups[key] = existing_qty + new_qty  # Суммируем
-                except:
-                    # Если не получается сложить, оставляем первое значение
-                    pass
-            else:
-                ingredient_groups[key] = quantity  # Добавляем новый ингредиент
-
-        # Создаем виджеты с чекбоксами для каждого ингредиента
-        for (name, unit), total_quantity in ingredient_groups.items():
-            # Создаем виджет элемента корзины
-            item_widget = CartItemWidget(name, total_quantity, unit)
-            list_item = QListWidgetItem()  # Создаем элемент списка
-            list_item.setSizeHint(item_widget.sizeHint())  # Устанавливаем размер
-            list_item.setBackground(QColor(248, 249, 250))  # Светло-серый фон
-            self.cart_list.addItem(list_item)  # Добавляем элемент в список
-            self.cart_list.setItemWidget(list_item, item_widget)  # Устанавливаем виджет для элемента
-
     def clear_recipe_cards(self):
         """Очищает все карточки рецептов из layout и удаляет их."""
-        # Проходим по всем карточкам
         for card in self.current_recipe_cards:
-            self.flow_layout.removeWidget(card)  # Удаляем из layout
-            card.deleteLater()  # Удаляем виджет
-        self.current_recipe_cards.clear()  # Очищаем список
+            self.flow_layout.removeWidget(card)
+            card.deleteLater()
+        self.current_recipe_cards.clear()
 
     def center_cards(self):
         """Центрирует карточки, если их мало (менее 4)."""
         if len(self.current_recipe_cards) < 4:
-            # Создаем контейнер с горизонтальным layout для центрирования
             container = QWidget()
             container_layout = QHBoxLayout(container)
-            container_layout.setContentsMargins(0, 0, 0, 0)  # Без отступов
+            container_layout.setContentsMargins(0, 0, 0, 0)
 
             # Добавляем растягивающееся пространство слева
             container_layout.addStretch()
@@ -2223,226 +1479,96 @@ class MainWindow(QMainWindow):
             # Добавляем растягивающееся пространство справа
             container_layout.addStretch()
 
-            # Очищаем FlowLayout и добавляем контейнер с центрированными карточками
             self.clear_recipe_cards()
             self.flow_layout.addWidget(container)
 
     def update_profile(self):
         """Обновляет данные профиля пользователя."""
-        try:
-            # Загружаем данные профиля из базы данных
-            profile_data = self.db.get_user_profile(self.user_id)
-            if profile_data:
-                # Только имя пользователя
-                profile_text = f"""
-                    <div style="text-align: center; padding: 10px;">
-                        <h2 style="margin: 0; color: #2c3e50;">👤 {profile_data['login']}</h2>
-                    </div>
-                    """
-                self.profile_info.setText(profile_text)
-
-                # Статистика остаётся полной
-                stats_text = f"""
-                    <b>📊 Ваша статистика:</b><br><br>
-                    📖 <b>Всего рецептов:</b> {profile_data['recipes_count']}<br>
-                    ❤️ <b>В избранном:</b> {profile_data['favorites_count']}<br>
-                    ✅ <b>Приготовлено:</b> {profile_data['cooked_count']}<br>
-                    🛒 <b>В корзине:</b> {profile_data['cart_count']}<br>
-                    """
-                self.stats_label.setText(stats_text)
-
-            # Загружаем избранные рецепты
-            self.load_favorite_recipes()
-
-            # Загружаем приготовленные рецепты
-            self.load_cooked_recipes()
-
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении профиля: {e}")
-
-    def load_favorite_recipes(self):
-        """Загружает избранные рецепты пользователя."""
-        # Очищаем предыдущие карточки избранных рецептов
-        for i in reversed(range(self.favorites_layout.count())):
-            item = self.favorites_layout.itemAt(i)
-            if item.widget():
-                item.widget().deleteLater()  # Удаляем виджет
-
-        try:
-            # Получаем избранные рецепты из базы данных
-            favorite_recipes = self.db.get_favorite_recipes(self.user_id)
-            if favorite_recipes:
-                # Создаем карточки для каждого избранного рецепта
-                for recipe in favorite_recipes:
-                    card = ProfileRecipeCard(recipe, self.db, self)  # Создаем карточку
-                    self.favorites_layout.addWidget(card)  # Добавляем в layout
-            else:
-                # Если нет избранных рецептов, показываем сообщение
-                no_favorites_label = QLabel("Нет избранных рецептов")
-                no_favorites_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Выравнивание по центру
-                no_favorites_label.setStyleSheet("color: #6c757d; font-size: 14px; padding: 40px;")  # Стили
-                self.favorites_layout.addWidget(no_favorites_label)  # Добавляем метку
-        except Exception as e:
-            print(f"Ошибка при загрузке избранных рецептов: {e}")
-
-    def load_cooked_recipes(self):
-        """Загружает приготовленные рецепты пользователя."""
-        # Очищаем предыдущие карточки приготовленных рецептов
-        for i in reversed(range(self.cooked_layout.count())):
-            item = self.cooked_layout.itemAt(i)
-            if item.widget():
-                item.widget().deleteLater()  # Удаляем виджет
-
-        try:
-            # Получаем приготовленные рецепты из базы данных
-            cooked_recipes = self.db.get_cooked_recipes(self.user_id)
-            if cooked_recipes:
-                # Создаем карточки для каждого приготовленного рецепта
-                for recipe in cooked_recipes:
-                    card = ProfileRecipeCard(recipe, self.db, self)  # Создаем карточку
-                    self.cooked_layout.addWidget(card)  # Добавляем в layout
-            else:
-                # Если нет приготовленных рецептов, показываем сообщение
-                no_cooked_label = QLabel("Нет приготовленных рецептов")
-                no_cooked_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                no_cooked_label.setStyleSheet("color: #6c757d; font-size: 14px; padding: 40px;")
-                self.cooked_layout.addWidget(no_cooked_label)  # Добавляем метку
-        except Exception as e:
-            print(f"Ошибка при загрузке приготовленных рецептов: {e}")
-
-    def change_avatar(self):
-        """Позволяет пользователю изменить аватар."""
-        # Открываем диалог выбора файла изображения
-        file_name, _ = QFileDialog.getOpenFileName(
-            self, "Выбрать аватар", "", "Images (*.png *.jpg *.jpeg *.bmp);;All files (*)"
-        )
-
-        # Если файл выбран
-        if file_name:
-            try:
-                # Читаем файл изображения как бинарные данные
-                with open(file_name, 'rb') as f:
-                    avatar_data = f.read()
-
-                # Пытаемся обновить аватар в базе данных
-                success = self.db.update_user_avatar(self.user_id, avatar_data)
-                if success:
-                    # Показываем сообщение об успехе и обновляем профиль
-                    QMessageBox.information(self, "Успех", "Аватар успешно обновлен!")
-                    self.update_profile()
-                else:
-                    # Показываем сообщение об ошибке
-                    QMessageBox.warning(self, "Ошибка", "Не удалось обновить аватар")
-            except Exception as e:
-                # Показываем сообщение об ошибке загрузки файла
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при загрузке аватара: {e}")
+        if hasattr(self, 'profile_widget'):
+            self.profile_widget.update_profile()
 
     def open_settings(self):
         """Открывает диалог настроек приложения."""
         try:
-            # Создаем диалог настроек
             dialog = SettingsDialog(self.db, self.user_id, self)
-            # Подключаем сигнал обновления настроек к методу применения настроек
             dialog.settings_updated.connect(self.apply_settings)
-            dialog.exec()  # Показываем диалог
+            dialog.exec()
         except Exception as e:
-            logger.error(f"Ошибка открытия настроек: {e}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть настройки: {str(e)}")
 
     def apply_settings(self, settings_data):
         """Применяет настройки из диалога настроек."""
         try:
-            # Получаем настройки шрифтов
-            font_size = settings_data.get('font_size', 10)  # Размер основного шрифта
-            title_font_size = settings_data.get('title_font_size', 14)  # Размер шрифта заголовков
+            font_size = settings_data.get('font_size', 10)
+            title_font_size = settings_data.get('title_font_size', 14)
 
-            # Обновляем стили приложения
             self.update_styles(font_size, title_font_size)
 
-            # Обновляем отображение изображений (показать/скрыть)
-            show_images = settings_data.get('show_images', True)
-            if not show_images:
-                self.hide_images()  # Скрываем изображения
-            else:
-                self.show_images()  # Показываем изображения
-
-            # Перезагружаем рецепты для применения изменений
             self.load_recipes()
 
-            # Показываем сообщение об успешном применении настроек
             QMessageBox.information(self, "Успех", "Настройки применены!")
 
         except Exception as e:
-            logger.error(f"Ошибка применения настроек: {e}")
             QMessageBox.warning(self, "Ошибка", "Не удалось применить некоторые настройки")
 
     def update_styles(self, font_size=10, title_font_size=14):
         """Обновляет стили приложения с новыми размерами шрифтов."""
         try:
-            # Формируем строку стилей с заданными размерами шрифтов
             base_style = f"""
                 QMainWindow {{
-                    background-color: #f8f9fa;          /* Светло-серый фон главного окна */
+                    background-color: #f8f9fa;          
                 }}
                 QWidget {{
-                    font-family: 'Segoe UI', Arial, sans-serif;  /* Шрифт для всех виджетов */
-                    font-size: {font_size}px;                    /* Размер основного шрифта */
+                    font-family: 'Segoe UI', Arial, sans-serif;  
+                    font-size: {font_size}px;                    
                 }}
                 QTabWidget::pane {{
-                    border: 1px solid #dee2e6;          /* Рамка вокруг области вкладок */
-                    background-color: white;            /* Белый фон */
-                    border-radius: 8px;                 /* Закругленные углы */
+                    border: 1px solid #dee2e6;          
+                    background-color: white;            
+                    border-radius: 8px;                 
                 }}
                 QTabBar::tab {{
-                    background-color: #e9ecef;          /* Светло-серый фон вкладок */
-                    color: #495057;                     /* Темно-серый цвет текста */
-                    padding: 8px 16px;                  /* Внутренние отступы */
-                    margin-right: 2px;                  /* Отступ между вкладками */
-                    border-top-left-radius: 4px;        /* Закругление верхних углов */
-                    border-top-right-radius: 4px;       /* Закругление верхних углов */
-                    font-size: {font_size}px;           /* Размер шрифта вкладок */
+                    background-color: #e9ecef;          
+                    color: #495057;                     
+                    padding: 8px 16px;                  
+                    margin-right: 2px;                  
+                    border-top-left-radius: 4px;        
+                    border-top-right-radius: 4px;       
+                    font-size: {font_size}px;           
                 }}
                 QTabBar::tab:selected {{
-                    background-color: white;            /* Белый фон выбранной вкладки */
-                    color: #495057;                     /* Темно-серый цвет текста */
-                    border-bottom: 2px solid #007bff;   /* Синяя полоска снизу */
+                    background-color: white;            
+                    color: #495057;                     
+                    border-bottom: 2px solid #007bff;   
                 }}
                 QPushButton {{
-                    background-color: #007bff;          /* Синий фон кнопок */
-                    color: white;                       /* Белый текст */
-                    border: none;                       /* Без рамки */
-                    padding: 8px 16px;                  /* Внутренние отступы */
-                    border-radius: 4px;                 /* Закругленные углы */
-                    font-weight: 500;                   /* Средняя жирность шрифта */
-                    font-size: {font_size}px;           /* Размер шрифта кнопок */
+                    background-color: #007bff;          
+                    color: white;                       
+                    border: none;                       
+                    padding: 8px 16px;                  
+                    border-radius: 4px;                 
+                    font-weight: 500;                  
+                    font-size: {font_size}px;           
                 }}
                 QPushButton:hover {{
-                    background-color: #0056b3;          /* Темно-синий фон при наведении */
+                    background-color: #0056b3;          
                 }}
                 QLabel {{
-                    font-size: {font_size}px;           /* Размер шрифта меток */
+                    font-size: {font_size}px;          
                 }}
                 QLineEdit, QTextEdit, QSpinBox, QComboBox {{
-                    font-size: {font_size}px;           /* Размер шрифта элементов ввода */
-                    padding: 6px;                       /* Внутренние отступы */
+                    font-size: {font_size}px;           
+                    padding: 6px;                       
                 }}
                 .header {{
-                    font-size: {title_font_size}px;     /* Размер шрифта заголовков */
-                    font-weight: bold;                  /* Жирный шрифт для заголовков */
+                    font-size: {title_font_size}px;     
+                    font-weight: bold;                  
                 }}
             """
-            self.setStyleSheet(base_style)  # Применяем стили
+            self.setStyleSheet(base_style)
 
         except Exception as e:
-            logger.error(f"Ошибка обновления стилей: {e}")
-
-    def hide_images(self):
-        """Скрывает изображения рецептов (заглушка для будущей реализации)."""
-        logger.info("Функция скрытия изображений рецептов")  # Логируем вызов
-
-    def show_images(self):
-        """Показывает изображения рецептов (заглушка для будущей реализации)."""
-        logger.info("Функция показа изображений рецептов")  # Логируем вызов
+            print(f"Ошибка обновления стилей: {e}")
 
     def open_help(self):
         """Открывает диалог справки приложения."""
@@ -2451,7 +1577,7 @@ class MainWindow(QMainWindow):
             dialog = HelpDialog(self)
             dialog.exec()  # Показываем диалог
         except Exception as e:
-            logger.error(f"Ошибка открытия справки: {e}")
+            print(f"Ошибка открытия справки: {e}")
             QMessageBox.critical(self, "Ошибка", "Не удалось открыть справку")
 
     def on_settings_updated(self):
@@ -2460,11 +1586,10 @@ class MainWindow(QMainWindow):
 
     def refresh_data(self):
         """Обновляет все данные приложения (рецепты, профиль, корзину)."""
-        self.load_recipes()  # Загружаем рецепты
-        self.update_profile()  # Обновляем профиль
-        self.update_cart_display()  # Обновляем корзину
-        # Показываем сообщение в статус-баре на 3 секунды
-        self.statusBar.showMessage("Данные обновлены", 3000)
+        self.load_recipes()
+        self.update_profile()
+        if hasattr(self, 'cart_widget'):
+            self.cart_widget.update_cart()
 
     def add_recipe(self):
         """Открывает диалог добавления нового рецепта и обновляет автодополнение"""
@@ -2480,76 +1605,30 @@ class MainWindow(QMainWindow):
     def view_recipe(self, recipe_data):
         """Открывает диалог просмотра рецепта в виде карточки."""
         try:
-            # Создаем диалог карточки рецепта
             dialog = RecipeCardDialog(recipe_data, self.db, self.user_id)
-            # Подключаем сигналы диалога к методам главного окна
-            dialog.add_to_cart.connect(self.add_to_cart)  # Добавление в корзину
-            dialog.recipe_updated.connect(self.load_recipes)  # Обновление рецептов
-            dialog.recipe_deleted.connect(self.on_recipe_deleted)  # Удаление рецепта
-            dialog.exec()  # Показываем диалог
+            dialog.add_to_cart.connect(self.add_to_cart)
+            dialog.recipe_updated.connect(self.load_recipes)
+            dialog.recipe_deleted.connect(self.on_recipe_deleted)
+            dialog.exec()
         except Exception as e:
             print(f"Ошибка при просмотре рецепта: {e}")
             QMessageBox.critical(self, "Ошибка", f"Ошибка при просмотре рецепта: {e}")
 
     def on_recipe_deleted(self, recipe_id):
         """Обработчик удаления рецепта."""
-        self.load_recipes()  # Обновляем список рецептов
-        self.update_profile()  # Обновляем профиль
-        # Показываем сообщение об успешном удалении
+        self.load_recipes()
+        self.update_profile()
         QMessageBox.information(self, "Успех", "Рецепт успешно удален!")
+
+    def add_to_cart(self, ingredients):
+        """Добавляет ингредиенты в корзину."""
+        if hasattr(self, 'cart_widget'):
+            self.cart_widget.add_to_cart(ingredients)
 
     def export_cart(self):
         """Экспортирует список покупок в текстовый файл."""
-        # Если корзина пуста
-        if not self.cart:
-            QMessageBox.warning(self, "Ошибка", "Корзина пуста!")
-            return
-
-        try:
-            # Открываем диалог сохранения файла
-            file_name, _ = QFileDialog.getSaveFileName(
-                self, "Сохранить список покупок", "список_покупок.txt", "Text files (*.txt)"
-            )
-
-            # Если файл выбран
-            if file_name:
-                # Открываем файл для записи с кодировкой UTF-8
-                with open(file_name, 'w', encoding='utf-8') as f:
-                    f.write("Список покупок:\n")  # Заголовок
-                    f.write("=" * 50 + "\n\n")  # Разделитель
-
-                    # Группируем ингредиенты
-                    ingredient_groups = {}
-                    for item in self.cart:
-                        name = item['name']
-                        quantity = item['quantity']
-                        unit = item['unit']
-                        key = (name, unit)  # Ключ для группировки
-                        if key in ingredient_groups:
-                            # Пытаемся сложить количества
-                            try:
-                                ingredient_groups[key] += float(quantity)
-                            except:
-                                # Если не получается сложить, оставляем как есть
-                                ingredient_groups[key] = quantity
-                        else:
-                            try:
-                                ingredient_groups[key] = float(quantity)
-                            except:
-                                ingredient_groups[key] = quantity
-
-                    # Записываем сгруппированные ингредиенты в файл
-                    for (name, unit), total_quantity in ingredient_groups.items():
-                        if isinstance(total_quantity, float):
-                            f.write(f"• {name}: {total_quantity:.1f} {unit}\n")
-                        else:
-                            f.write(f"• {name}: {total_quantity} {unit}\n")
-
-                # Показываем сообщение об успехе
-                QMessageBox.information(self, "Успех", f"Список сохранен в файл: {file_name}")
-        except Exception as e:
-            # Показываем сообщение об ошибке экспорта
-            QMessageBox.critical(self, "Ошибка", f"Не удалось экспортировать список: {e}")
+        if hasattr(self, 'cart_widget'):
+            self.cart_widget.export_cart()
 
     def update_stats(self):
         """Обновление статистики (псевдоним для update_profile)."""

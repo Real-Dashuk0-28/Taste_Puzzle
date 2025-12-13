@@ -1,52 +1,8 @@
-import os
-import sys
-import logging
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton,
                              QLineEdit, QLabel, QMessageBox, QTabWidget, QCheckBox)
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QIcon
-logger = logging.getLogger(__name__)
 
-
-def resource_path(relative_path):
-    """Получает корректный путь к ресурсам в режиме exe и разработки"""
-    try:
-        # PyInstaller создает временную папку _MEIPASS
-        base_path = sys._MEIPASS
-    except AttributeError:
-        try:
-            # Альтернативный способ определения пути в PyInstaller
-            base_path = os.path.join(sys._MEIPASS2, relative_path)
-            if os.path.exists(base_path):
-                return base_path
-        except:
-            # Режим разработки
-            base_path = os.path.dirname(os.path.abspath(__file__))
-            # Поднимаемся на уровень выше (из src в корень проекта)
-            base_path = os.path.dirname(base_path)
-
-    # Строим полный путь
-    path = os.path.join(base_path, relative_path)
-
-    # Проверяем наличие файла
-    if os.path.exists(path):
-        return path
-
-    # Если не найден, пробуем альтернативные пути
-    alternative_paths = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path),
-        os.path.join(os.getcwd(), relative_path),
-        relative_path,
-    ]
-
-    for alt_path in alternative_paths:
-        if os.path.exists(alt_path):
-            return alt_path
-
-    # Если файл не найден нигде
-    logger.warning(f"Ресурс не найден: {relative_path}")
-    return None
 
 class LoginWindow(QWidget):
     """Окно авторизации и регистрации пользователя"""
@@ -64,17 +20,8 @@ class LoginWindow(QWidget):
         self.setGeometry(300, 300, 400, 400)
 
         # НАСТРОЙКА ИКОНКИ ОКНА
-        icon_path = resource_path("../img/icon.ico")
-        if icon_path and os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-        else:
-            # Fallback путь
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            icon_path = os.path.join(os.path.dirname(current_dir), '..', 'img', 'icon.ico')
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
+        self.setWindowIcon(QIcon("../img/ico2.ico"))
 
-        # СОЗДАНИЕ ОСНОВНОГО LAYOUT
         layout = QVBoxLayout()
         layout.setSpacing(15)
         layout.setContentsMargins(30, 30, 30, 30)
@@ -87,24 +34,20 @@ class LoginWindow(QWidget):
         login_layout = QVBoxLayout()
         login_layout.setSpacing(15)
 
-        # ВКЛАДКА "ВХОД В СИСТЕМУ"
         login_title = QLabel("Вход в систему")
         login_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
         login_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         login_layout.addWidget(login_title)
 
-        # Поле ввода логина
         self.login_username = QLineEdit()
         self.login_username.setPlaceholderText("Введите логин")
         self.login_username.setStyleSheet("padding: 10px; font-size: 14px;")
 
-        # Поле ввода пароля
         self.login_password = QLineEdit()
         self.login_password.setPlaceholderText("Введите пароль")
         self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.login_password.setStyleSheet("padding: 10px; font-size: 14px;")
 
-        # Чекбокс "Запомнить меня"
         self.remember_me = QCheckBox("Запомнить меня")
         self.remember_me.setStyleSheet("""
             QCheckBox {
@@ -118,7 +61,6 @@ class LoginWindow(QWidget):
             }
         """)
 
-        # Кнопка входа
         login_btn = QPushButton("Войти")
         login_btn.setStyleSheet("""
             QPushButton {
@@ -135,7 +77,6 @@ class LoginWindow(QWidget):
         """)
         login_btn.clicked.connect(self.handle_login)
 
-        # Добавление элементов на вкладку входа
         login_layout.addWidget(self.login_username)
         login_layout.addWidget(self.login_password)
         login_layout.addWidget(self.remember_me)
@@ -147,30 +88,25 @@ class LoginWindow(QWidget):
         register_layout = QVBoxLayout()
         register_layout.setSpacing(15)
 
-        # Заголовок вкладки
         register_title = QLabel("Регистрация")
         register_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
         register_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         register_layout.addWidget(register_title)
 
-        # Поле ввода логина для регистрации
         self.register_username = QLineEdit()
         self.register_username.setPlaceholderText("Придумайте логин")
         self.register_username.setStyleSheet("padding: 10px; font-size: 14px;")
 
-        # Поле ввода пароля для регистрации
         self.register_password = QLineEdit()
-        self.register_password.setPlaceholderText("Придумайте пароль")
-        self.register_password.setEchoMode(QLineEdit.EchoMode.Password)  # Скрытие пароля
+        self.register_password.setPlaceholderText("Придумайте пароль, не менее 6 символов")
+        self.register_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.register_password.setStyleSheet("padding: 10px; font-size: 14px;")
 
-        # Поле подтверждения пароля
         self.register_confirm_password = QLineEdit()
         self.register_confirm_password.setPlaceholderText("Повторите пароль")
-        self.register_confirm_password.setEchoMode(QLineEdit.EchoMode.Password)  # Скрытие пароля
+        self.register_confirm_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.register_confirm_password.setStyleSheet("padding: 10px; font-size: 14px;")
 
-        # Кнопка регистрации
         register_btn = QPushButton("Зарегистрироваться")
         register_btn.setStyleSheet("""
                     QPushButton {
@@ -185,9 +121,8 @@ class LoginWindow(QWidget):
                         background-color: #218838;
                     }
                 """)
-        register_btn.clicked.connect(self.handle_register) # Подключение обработчика
+        register_btn.clicked.connect(self.handle_register)
 
-        # Добавление элементов на вкладку регистрации
         register_layout.addWidget(self.register_username)
         register_layout.addWidget(self.register_password)
         register_layout.addWidget(self.register_confirm_password)
@@ -206,7 +141,6 @@ class LoginWindow(QWidget):
         username = self.login_username.text().strip()
         password = self.login_password.text()
 
-        # ПРОВЕРКА ЗАПОЛНЕННОСТИ ПОЛЕЙ
         if not username or not password:
             QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
             return
@@ -214,7 +148,7 @@ class LoginWindow(QWidget):
         # АУТЕНТИФИКАЦИЯ ПОЛЬЗОВАТЕЛЯ
         users = self.db.get_users(username, password)
         if users:
-            user_id = users[0][0] # Получение ID пользователя
+            user_id = users[0][0]
 
             # СОХРАНЕНИЕ НАСТРОЕК АВТОМАТИЧЕСКОГО ВХОДА
             if self.remember_me.isChecked():
@@ -234,17 +168,14 @@ class LoginWindow(QWidget):
         password = self.register_password.text()
         confirm_password = self.register_confirm_password.text()
 
-        # ПРОВЕРКА ЗАПОЛНЕННОСТИ ПОЛЕЙ
         if not username or not password:
             QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
             return
 
-        # ПРОВЕРКА СОВПАДЕНИЯ ПАРОЛЕЙ
         if password != confirm_password:
             QMessageBox.warning(self, "Ошибка", "Пароли не совпадают")
             return
 
-        # ПРОВЕРКА СЛОЖНОСТИ ПАРОЛЯ
         if len(password) < 6:
             QMessageBox.warning(self, "Ошибка", "Пароль должен содержать не меньше 6 символов")
             return
@@ -254,7 +185,6 @@ class LoginWindow(QWidget):
         if success:
             QMessageBox.information(self, "Успех", "Регистрация прошла успешно!")
 
-            # ПЕРЕКЛЮЧЕНИЕ НА ВКЛАДКУ ВХОДА И ЗАПОЛНЕНИЕ ПОЛЕЙ
             self.tabs.setCurrentIndex(0)
             self.login_username.setText(username)
             self.login_password.clear()

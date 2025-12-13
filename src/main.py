@@ -1,27 +1,11 @@
 import sys
-import os
-import logging
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QSettings
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Добавляем путь к src в sys.path для импортов
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-# ИМПОРТ ПОЛЬЗОВАТЕЛЬСКИХ МОДУЛЕЙ
-try:
-    from database import DataBase
-    from login_window import LoginWindow
-    from main_window import MainWindow
-except ImportError as e:
-    logger.critical(f"Ошибка импорта модулей: {e}")
-    sys.exit(1)
+from database import DataBase
+from login_window import LoginWindow
+from main_window import MainWindow
 
 
 class PuzzleVkusovApp:
@@ -31,20 +15,15 @@ class PuzzleVkusovApp:
             self.app = QApplication(sys.argv)
             self.settings = QSettings("PuzzleVkusov", "AppSettings")
 
-            # НАСТРОЙКА ИКОНКИ ПРИЛОЖЕНИЯ
-            icon_path = os.path.join(os.path.dirname(current_dir), 'img', 'ico2.ico')
-            if os.path.exists(icon_path):
-                self.app.setWindowIcon(QIcon(icon_path))
+            self.app.setWindowIcon(QIcon("../img/ico2.ico"))
 
-            # ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
             self.db = DataBase()
             self.current_user_id = None
 
-            # ПРОВЕРКА АВТОМАТИЧЕСКОГО ВХОДА
             self.check_auto_login()
 
         except Exception as e:
-            logger.critical(f"Ошибка инициализации приложения: {e}")
+            print(f"Ошибка инициализации приложения: {e}")
             self.show_error_message(f"Критическая ошибка инициализации: {e}")
             sys.exit(1)
 
@@ -64,11 +43,11 @@ class PuzzleVkusovApp:
                 user_id = self.settings.value("user_id", None, type=int)
                 if user_id:
                     self.current_user_id = user_id
-                    self.show_main_window() # Показ главного окна
+                    self.show_main_window()
                     return
-            self.show_login() # Показ окна входа
+            self.show_login()
         except Exception as e:
-            logger.error(f"Ошибка автоматического входа: {e}")
+            print(f"Ошибка автоматического входа: {e}")
             self.show_login()
 
     def show_login(self):
@@ -77,7 +56,7 @@ class PuzzleVkusovApp:
             self.login_window = LoginWindow(self.db, self.on_login_success)
             self.login_window.show()
         except Exception as e:
-            logger.error(f"Ошибка создания окна входа: {e}")
+            print(f"Ошибка создания окна входа: {e}")
             self.show_error_message(f"Ошибка создания окна входа: {e}")
 
     def on_login_success(self, user_id):
@@ -85,10 +64,10 @@ class PuzzleVkusovApp:
         try:
             self.current_user_id = user_id
             if hasattr(self, 'login_window'):
-                self.login_window.close() # Закрытие окна входа
-            self.show_main_window() # Показ главного окна
+                self.login_window.close()
+            self.show_main_window()
         except Exception as e:
-            logger.error(f"Ошибка после успешного входа: {e}")
+            print(f"Ошибка после успешного входа: {e}")
             self.show_error_message(f"Ошибка после входа: {e}")
 
     def show_main_window(self):
@@ -96,12 +75,12 @@ class PuzzleVkusovApp:
         try:
             # ЗАГРУЗКА КОРЗИНЫ ИЗ БАЗЫ ДАННЫХ ПЕРЕД СОЗДАНИЕМ ГЛАВНОГО ОКНА
             cart_items = self.db.get_cart_items(self.current_user_id)
-            logger.info(f"Загружено {len(cart_items)} элементов корзины для пользователя {self.current_user_id}")
+            print(f"Загружено {len(cart_items)} элементов корзины для пользователя {self.current_user_id}")
 
             self.main_window = MainWindow(self.db, self.current_user_id, self.logout)
             self.main_window.show()
         except Exception as e:
-            logger.error(f"Ошибка создания главного окна: {e}")
+            print(f"Ошибка создания главного окна: {e}")
             self.show_error_message(f"Ошибка создания главного окна: {e}")
 
     def logout(self):
@@ -117,7 +96,7 @@ class PuzzleVkusovApp:
             self.current_user_id = None
             self.show_login()
         except Exception as e:
-            logger.error(f"Ошибка при выходе из системы: {e}")
+            print(f"Ошибка при выходе из системы: {e}")
             self.show_error_message(f"Ошибка при выходе: {e}")
 
     def run(self):
@@ -125,7 +104,7 @@ class PuzzleVkusovApp:
         try:
             return self.app.exec()
         except Exception as e:
-            logger.critical(f"Критическая ошибка при запуске приложения: {e}")
+            print(f"Критическая ошибка при запуске приложения: {e}")
             return 1
 
 
@@ -134,5 +113,5 @@ if __name__ == "__main__":
         puzzle_app = PuzzleVkusovApp()
         sys.exit(puzzle_app.run())
     except Exception as e:
-        logger.critical(f"Непредвиденная ошибка: {e}")
+        print(f"Непредвиденная ошибка: {e}")
         sys.exit(1)

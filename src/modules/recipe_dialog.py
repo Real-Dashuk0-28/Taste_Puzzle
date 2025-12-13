@@ -1,33 +1,12 @@
 import os
-import sys
-import logging
-from pathlib import Path
-from sqlalchemy.orm import joinedload
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QTextEdit, QComboBox, QSpinBox,
                              QPushButton, QLabel, QMessageBox, QFileDialog, QScrollArea, QTableWidget, QTableWidgetItem,
                              QHeaderView, QDoubleSpinBox, QWidget)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIcon
-import tempfile
-import shutil
 
 from src.database import Recipe
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-
-def resource_path(relative_path):
-    """Получаем абсолютный путь к ресурсу, работает для dev и для PyInstaller"""
-    try:
-        # PyInstaller создает временную папку и сохраняет путь в _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
 
 
 class ClickableLabel(QLabel):
@@ -56,14 +35,14 @@ class RecipeDialog(QDialog):
         super().__init__()
         self.db = db
         self.user_id = user_id
-        self.recipe_data = recipe_data  # Данные рецепта (None для нового рецепта)
-        self.ingredients_data = []  # Список для хранения данных ингредиентов
-        self.image_data = None  # Данные изображения рецепта
-        self.temp_image_path = None  # Путь к временному файлу изображения
+        self.recipe_data = recipe_data
+        self.ingredients_data = []
+        self.image_data = None
+        self.temp_image_path = None
 
         self.init_ui()
-        if self.recipe_data:  # Если переданы данные рецепта (режим редактирования)
-            self.load_recipe_data()  # Загрузка данных рецепта в форму
+        if self.recipe_data:
+            self.load_recipe_data()
 
     def format_instructions(self, instructions):
         """Форматирует инструкции с автоматической нумерацией и улучшенным видом"""
@@ -108,14 +87,10 @@ class RecipeDialog(QDialog):
 
     def init_ui(self):
         """Метод инициализации пользовательского интерфейса"""
-        layout = QVBoxLayout()  # Создание вертикального компоновщика
+        layout = QVBoxLayout()
 
-        # НАСТРОЙКА ИКОНКИ ОКНА
-        icon_path = resource_path("img/icon.ico")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        self.setWindowIcon(QIcon("img/icon.ico"))
 
-        # УСТАНОВКА СТИЛЕЙ ДЛЯ ДИАЛОГА
         self.setStyleSheet("""
             QDialog {
                 background-color: #f5f7fa;
@@ -163,14 +138,12 @@ class RecipeDialog(QDialog):
             }
         """)
 
-        # Прокручиваемая область для длинных форм
         scroll_area = QScrollArea()
         scroll_widget = QWidget()
         scroll_layout = QVBoxLayout(scroll_widget)
 
         # ФОРМА ДЛЯ ОСНОВНОЙ ИНФОРМАЦИИ О РЕЦЕПТЕ
         form_layout = QFormLayout()
-        form_layout.setSpacing(12)
         form_layout.setContentsMargins(10, 10, 10, 10)
 
         # Создание элементов ввода
@@ -188,33 +161,31 @@ class RecipeDialog(QDialog):
         self.cook_time_input.setRange(1, 480)
         self.cook_time_input.setSuffix(' мин')
 
-        # ПОЛЕ ДЛЯ КОЛИЧЕСТВА ПОРЦИЙ (servings)
         self.servings_input = QSpinBox()
         self.servings_input.setRange(1, 20)
         self.servings_input.setValue(4)
         self.servings_input.setSuffix(' порции')
 
-        # ДОБАВЛЕНО: Поле для видео-ссылки
         self.video_url_input = QLineEdit()
         self.video_url_input.setPlaceholderText("Ссылка на видео (YouTube, Vimeo и т.д.)")
 
-        # === ВЫПАДАЮЩИЙ СПИСОК ТИПА БЛЮДА (dish_type) ===
+        # === ВЫПАДАЮЩИЙ СПИСОК ТИПА БЛЮДА ===
         self.dish_type_combo = QComboBox()
         self.dish_type_combo.addItem("Не выбран", None)
         dish_types = self.db.get_dish_types()
-        for dish_type_id, dish_type_name in dish_types:  # ИСПРАВЛЕНО распаковка кортежа
+        for dish_type_id, dish_type_name in dish_types:
             self.dish_type_combo.addItem(dish_type_name, dish_type_id)
 
-        # === ВЫПАДАЮЩИЙ СПИСОК КУХНИ (cuisine) ===
+        # === ВЫПАДАЮЩИЙ СПИСОК КУХНИ ===
         self.cuisine_combo = QComboBox()
         self.cuisine_combo.addItem("Не выбрана", None)
         cuisines = self.db.get_cuisines()
-        for cuisine_id, cuisine_name in cuisines:  # ИСПРАВЛЕНО распаковка кортежа
+        for cuisine_id, cuisine_name in cuisines:
             self.cuisine_combo.addItem(cuisine_name, cuisine_id)
 
         # СЕКЦИЯ ЗАГРУЗКИ ИЗОБРАЖЕНИЯ
         image_layout = QHBoxLayout()
-        self.image_label = QLabel()  # Метка для отображения изображения
+        self.image_label = QLabel()
         self.image_label.setFixedSize(150, 150)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setStyleSheet("""
@@ -225,10 +196,10 @@ class RecipeDialog(QDialog):
                 color: #7f8c8d;
             }
         """)
-        self.image_label.setText("Изображение\nне выбрано")  # Текст по умолчанию
+        self.image_label.setText("Изображение\nне выбрано")
 
         load_image_btn = QPushButton("Выбрать изображение")
-        load_image_btn.setObjectName("image_btn")  # Установка имени объекта для стилей
+        load_image_btn.setObjectName("image_btn")
         load_image_btn.clicked.connect(self.load_image)
 
         image_layout.addWidget(self.image_label)
@@ -240,7 +211,7 @@ class RecipeDialog(QDialog):
         form_layout.addRow('Кухня:', self.cuisine_combo)
         form_layout.addRow('Тип блюда:', self.dish_type_combo)
         form_layout.addRow('Время приготовления:', self.cook_time_input)
-        form_layout.addRow('Количество порций:', self.servings_input)  # ДОБАВЛЕНО
+        form_layout.addRow('Количество порций:', self.servings_input)
         form_layout.addRow('Видео-ссылка:', self.video_url_input)
         form_layout.addRow('Изображение:', image_layout)
         form_layout.addRow('Инструкции:', self.instruction_input)
@@ -252,7 +223,6 @@ class RecipeDialog(QDialog):
         # Панель добавления ингредиентов
         add_ingredient_layout = QHBoxLayout()
 
-        # Выпадающий список ингредиентов
         self.ingredient_combo = QComboBox()
         ingredients = self.db.get_ingredients()  # Возвращает список кортежей (id, name)
         for ingredient_id, ingredient_name in ingredients:
@@ -265,16 +235,13 @@ class RecipeDialog(QDialog):
         self.quantity_input.setValue(100)
         self.quantity_input.setSingleStep(10)
 
-        # Выпадающий список единиц измерения
         self.unit_combo = QComboBox()
         units = ["г", "кг", "мл", "л", "шт", "ст.л.", "ч.л.", "стакан", "щепотка", "по вкусу"]
         self.unit_combo.addItems(units)
 
-        # Кнопка добавления ингредиента
         add_ingredient_btn = QPushButton('Добавить')
         add_ingredient_btn.clicked.connect(self.add_ingredient)
 
-        # Добавление элементов на панель
         add_ingredient_layout.addWidget(QLabel('Ингредиент:'))
         add_ingredient_layout.addWidget(self.ingredient_combo)
         add_ingredient_layout.addWidget(QLabel("Количество:"))
@@ -282,26 +249,22 @@ class RecipeDialog(QDialog):
         add_ingredient_layout.addWidget(self.unit_combo)
         add_ingredient_layout.addWidget(add_ingredient_btn)
 
-        # Создание таблицы для отображения добавленных ингредиентов
         self.ingredients_table = QTableWidget()
         self.ingredients_table.setColumnCount(3)
         self.ingredients_table.setHorizontalHeaderLabels(["Ингредиент", "Количество", "Единица"])
         self.ingredients_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-        # Кнопка удаления ингредиента
         remove_ingredient_btn = QPushButton('Удалить выбранный')
         remove_ingredient_btn.clicked.connect(self.remove_ingredient)
 
-        # Добавление элементов в секцию ингредиентов
         ingredients_layout.addLayout(add_ingredient_layout)
         ingredients_layout.addWidget(self.ingredients_table)
         ingredients_layout.addWidget(remove_ingredient_btn)
 
-        # СЕКЦИЯ ДЛЯ КБЖУ (ПИЩЕВОЙ ЦЕННОСТИ)
+        # СЕКЦИЯ ДЛЯ КБЖУ
         kbju_layout = QHBoxLayout()
         kbju_layout.addWidget(QLabel('Пищевая ценность:'))
 
-        # Создание элементов для КБЖУ
         self.calories_input = QSpinBox()
         self.calories_input.setRange(0, 5000)
         self.calories_input.setPrefix("Калории: ")
@@ -322,7 +285,6 @@ class RecipeDialog(QDialog):
         self.carbs_input.setPrefix("Углеводы: ")
         self.carbs_input.setSuffix(" г")
 
-        # Добавление элементов КБЖУ в компоновщик
         kbju_layout.addWidget(self.calories_input)
         kbju_layout.addWidget(self.proteins_input)
         kbju_layout.addWidget(self.fats_input)
@@ -339,7 +301,6 @@ class RecipeDialog(QDialog):
         buttons_layout.addWidget(save_btn)
         buttons_layout.addWidget(cancel_btn)
 
-        # ДОБАВЛЕНИЕ ВСЕХ СЕКЦИЙ В ОСНОВНОЙ КОМПОНОВЩИК (layout)
         scroll_layout.addLayout(form_layout)
         scroll_layout.addLayout(ingredients_layout)
         scroll_layout.addLayout(kbju_layout)
@@ -350,9 +311,8 @@ class RecipeDialog(QDialog):
         layout.addWidget(scroll_area)
 
         self.setLayout(layout)
-        # Установка заголовка окна в зависимости от режима
         self.setWindowTitle('Редактировать рецепт' if self.recipe_data else 'Новый рецепт')
-        self.resize(800, 850)  # Увеличили высоту из-за добавления поля servings
+        self.resize(800, 850)
 
     def load_image(self):
         """Загрузка изображения для рецепта"""
@@ -365,15 +325,13 @@ class RecipeDialog(QDialog):
             )
 
             if file_name:
-                logger.info(f"📸 Выбран файл: {file_name}")
-
-                # Проверяем размер файла (максимум 5 МБ)
+                # Размер файла (максимум 5 МБ)
                 file_size = os.path.getsize(file_name)
                 if file_size > 5 * 1024 * 1024:
                     QMessageBox.warning(self, "Ошибка", "Файл слишком большой (макс. 5 МБ)")
                     return
 
-                # Сохраняем оригинальный путь к файлу
+                # Оригинальный путь к файлу
                 self.image_data = file_name
 
                 # Показываем превью
@@ -388,27 +346,11 @@ class RecipeDialog(QDialog):
                     self.image_label.setPixmap(scaled_pixmap)
                     self.image_label.setText("")
 
-                    # В режиме exe копируем файл во временную папку
-                    if getattr(sys, 'frozen', False):
-                        temp_dir = tempfile.gettempdir()
-                        temp_file = os.path.join(temp_dir, f"recipe_temp_{os.path.basename(file_name)}")
-                        shutil.copy2(file_name, temp_file)
-                        self.temp_image_path = temp_file
-                        self.image_data = temp_file
-                        logger.info(f"✅ Изображение скопировано во временный файл: {temp_file}")
-                    else:
-                        self.image_data = file_name
-
-                    logger.info(f"✅ Изображение выбрано: {file_name}")
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Невозможно загрузить изображение")
-
         except Exception as e:
-            logger.error(f"❌ Ошибка загрузки изображения: {e}")
             QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки изображения: {str(e)}")
 
     def add_ingredient(self):
-        """Метод добавления ингредиента в таблицу"""
+        # Метод добавления ингредиента в таблицу
         try:
             ing_id = self.ingredient_combo.currentData()
             ing_name = self.ingredient_combo.currentText()
@@ -426,7 +368,6 @@ class RecipeDialog(QDialog):
                     QMessageBox.warning(self, 'Ошибка', 'Этот ингредиент уже добавлен')
                     return
 
-            # Добавление ингредиента в данные (ID, количество, единица)
             self.ingredients_data.append((ing_id, quantity, unit))
 
             # Добавление ингредиента в таблицу
@@ -440,11 +381,10 @@ class RecipeDialog(QDialog):
             self.quantity_input.setValue(100)
 
         except Exception as e:
-            logger.error(f"Ошибка при добавлении ингредиента: {e}")
             QMessageBox.critical(self, 'Ошибка', f'Ошибка при добавлении ингредиента: {e}')
 
     def remove_ingredient(self):
-        """Метод удаления выбранного ингредиента из таблицы"""
+        # Метод удаления выбранного ингредиента из таблицы
         try:
             current_row = self.ingredients_table.currentRow()
             if current_row >= 0:
@@ -453,11 +393,10 @@ class RecipeDialog(QDialog):
             else:
                 QMessageBox.warning(self, 'Ошибка', 'Выберите ингредиент для удаления')
         except Exception as e:
-            logger.error(f"Ошибка при удалении ингредиента: {e}")
             QMessageBox.critical(self, 'Ошибка', f'Ошибка при удалении ингредиента: {e}')
 
     def load_recipe_data(self):
-        """Метод загрузки данных рецепта в форму (для редактирования)"""
+        # Метод загрузки данных рецепта в форму (для редактирования)
         try:
             # Получаем ID рецепта
             recipe_id = None
@@ -554,7 +493,6 @@ class RecipeDialog(QDialog):
             session.close()
 
         except Exception as e:
-            logger.error(f"Ошибка при загрузке данных рецепта: {e}")
             QMessageBox.critical(self, 'Ошибка', f'Ошибка при загрузке данных рецепта: {e}')
 
     def is_valid_url(self, url):
@@ -587,16 +525,11 @@ class RecipeDialog(QDialog):
             if domain in url_lower:
                 return True
 
-        # Если не видео-платформа, все равно разрешаем (может быть другая ссылка)
         return True
 
     def save_recipe(self):
         """Метод сохранения рецепта"""
         try:
-            logger.info("=" * 50)
-            logger.info("СОХРАНЕНИЕ РЕЦЕПТА")
-            logger.info("=" * 50)
-
             # Проверка обязательных полей
             if not self.name_input.text().strip():
                 QMessageBox.warning(self, 'Ошибка', 'Введите название рецепта')
@@ -609,9 +542,6 @@ class RecipeDialog(QDialog):
             # Получение данных из формы
             dish_type_id = self.dish_type_combo.currentData()
             cuisine_id = self.cuisine_combo.currentData()
-
-            logger.info(f"dish_type_id: {dish_type_id}")
-            logger.info(f"cuisine_id: {cuisine_id}")
 
             # Проверка типа блюда
             if not dish_type_id:
@@ -653,15 +583,13 @@ class RecipeDialog(QDialog):
                         break
 
                 ingredients_list.append((ing_id, quantity, unit))
-                logger.info(f"Ингредиент: {ing_name} - {quantity} {unit}")
 
-            # Обработка изображения - передаем данные как есть
-            image_data = self.image_data  # Это может быть путь или bytes
+            # Обработка изображения
+            image_data = self.image_data
 
             # Сохранение рецепта в базу данных
             recipe_id = None
 
-            # ИСПРАВЛЕНО: Получаем servings
             servings = self.servings_input.value()
 
             if self.recipe_data:
@@ -670,9 +598,6 @@ class RecipeDialog(QDialog):
                     recipe_id = self.recipe_data
                 else:
                     recipe_id = self.recipe_data[0]
-
-                logger.info(f"Режим редактирования рецепта ID={recipe_id}")
-                logger.info(f"Servings: {servings}, Video URL: {video_url}")
 
                 # Обновляем рецепт
                 success = self.db.update_recipe(
@@ -697,17 +622,14 @@ class RecipeDialog(QDialog):
                             recipe.servings = servings
                             recipe.external_url = video_url
                             session.commit()
-                            logger.info("Дополнительные поля обновлены")
+                            print("Дополнительные поля обновлены")
                     except Exception as e:
-                        logger.error(f"Ошибка обновления доп. полей: {e}")
+                        print(f"Ошибка обновления доп. полей: {e}")
                     finally:
                         session.close()
 
             else:
                 # Режим добавления нового рецепта
-                logger.info("Режим добавления нового рецепта")
-                logger.info(f"Servings: {servings}, Video URL: {video_url}")
-
                 recipe_id = self.db.add_recipe(
                     user_id=self.user_id,
                     name=self.name_input.text(),
@@ -720,7 +642,6 @@ class RecipeDialog(QDialog):
                     nutrition_data=nutrition_data,
                     image=image_data
                 )
-
                 success = recipe_id is not None
 
                 # Обновляем дополнительные поля
@@ -732,32 +653,28 @@ class RecipeDialog(QDialog):
                             recipe.servings = servings
                             recipe.external_url = video_url
                             session.commit()
-                            logger.info("Дополнительные поля добавлены")
                     except Exception as e:
-                        logger.error(f"Ошибка добавления доп. полей: {e}")
+                        print(f"Ошибка добавления доп. полей: {e}")
                     finally:
                         session.close()
 
             if success:
-                logger.info("✅ РЕЦЕПТ УСПЕШНО СОХРАНЕН!")
+                print("✅ РЕЦЕПТ УСПЕШНО СОХРАНЕН!")
 
                 # Очищаем временные файлы если есть
                 if self.temp_image_path and os.path.exists(self.temp_image_path):
                     try:
                         os.remove(self.temp_image_path)
-                        logger.info(f"Удален временный файл: {self.temp_image_path}")
                     except Exception as e:
-                        logger.warning(f"Не удалось удалить временный файл: {e}")
+                        print(f"Не удалось удалить временный файл: {e}")
 
                 self.recipe_saved.emit()
                 self.accept()
                 QMessageBox.information(self, 'Успех', 'Рецепт успешно сохранен!')
             else:
-                logger.error("❌ РЕЦЕПТ НЕ СОХРАНЕН!")
                 QMessageBox.warning(self, 'Ошибка', 'Не удалось сохранить рецепт')
 
         except Exception as e:
-            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в save_recipe: {e}")
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, 'Ошибка', f'Ошибка при сохранении рецепта:\n{str(e)}')
@@ -814,13 +731,11 @@ class RecipeCardDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setFixedSize(850, 950)  # Размер открытой карточки рецепта
+        self.setFixedSize(850, 950)
         self.setWindowTitle(self.recipe.name)
 
         # Установка иконки
-        icon_path = resource_path("img/icon.ico")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        self.setWindowIcon(QIcon("../img/icon.ico"))
 
         self.setStyleSheet("""
             QDialog {
@@ -921,8 +836,6 @@ class RecipeCardDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
 
         # === ПЕРВЫЙ БЛОК: Заголовок и основная информация ===
-
-        # Название рецепта по центру
         title = QLabel(self.recipe.name)
         title.setStyleSheet("""
             QLabel {
@@ -957,7 +870,6 @@ class RecipeCardDialog(QDialog):
             }
         """)
 
-        # Загрузка изображения
         pixmap = self.db.get_recipe_image(self.recipe.id)
         if pixmap and not pixmap.isNull():
             scaled_pixmap = pixmap.scaled(210, 170, Qt.AspectRatioMode.KeepAspectRatio,
@@ -975,7 +887,7 @@ class RecipeCardDialog(QDialog):
         info_container = QVBoxLayout()
         info_container.setSpacing(15)
 
-        # Количество порций (servings) - ДОБАВЛЕНО
+        # Количество порций
         if self.recipe.servings:
             servings_box = QWidget()
             servings_box.setStyleSheet("""
@@ -994,7 +906,7 @@ class RecipeCardDialog(QDialog):
             servings_layout.addWidget(servings_value)
             info_container.addWidget(servings_box)
 
-        # Кухня (если есть)
+        # Кухня
         if self.recipe.cuisine:
             cuisine_box = QWidget()
             cuisine_box.setStyleSheet("""
@@ -1052,7 +964,7 @@ class RecipeCardDialog(QDialog):
         time_layout.addWidget(time_value)
         info_container.addWidget(time_box)
 
-        # Видео-ссылка если есть
+        # Видео-ссылка
         if self.recipe.external_url:
             video_box = QWidget()
             video_box.setStyleSheet("""
@@ -1132,7 +1044,6 @@ class RecipeCardDialog(QDialog):
                 ingredients_list += f"• {ing[0]}: {ing[1]} {ing[2]}\n"
             ingredients_text.setPlainText(ingredients_list)
         except Exception as e:
-            logger.error(f"Ошибка при загрузке ингредиентов: {e}")
             ingredients_text.setPlainText("Не удалось загрузить ингредиенты")
 
         layout.addWidget(ingredients_text)
@@ -1160,7 +1071,7 @@ class RecipeCardDialog(QDialog):
         instructions_text.setPlainText(formatted_instructions)
         layout.addWidget(instructions_text)
 
-        # === ПЯТЫЙ БЛОК: КБЖУ (если есть) ===
+        # === ПЯТЫЙ БЛОК: КБЖУ ===
         if self.recipe.nutrition and any([
             self.recipe.nutrition.calories,
             self.recipe.nutrition.proteins,
@@ -1205,12 +1116,11 @@ class RecipeCardDialog(QDialog):
             nutrition_layout.addStretch()
             layout.addWidget(nutrition_box)
 
-        # === ШЕСТОЙ БЛОК: Кнопки действий ===
+        # === ШЕСТОЙ БЛОК ===
         buttons_label = QLabel("⚡ Действия")
         buttons_label.setProperty("class", "section-header")
         layout.addWidget(buttons_label)
 
-        # Создаем контейнер для кнопок
         buttons_container = QWidget()
         buttons_container.setStyleSheet("""
             QWidget {
@@ -1225,28 +1135,24 @@ class RecipeCardDialog(QDialog):
         buttons_layout.setSpacing(15)
         buttons_layout.setContentsMargins(20, 10, 20, 10)
 
-        # Кнопка редактирования
         edit_btn = QPushButton("✏️")
         edit_btn.setObjectName("edit_btn")
         edit_btn.setToolTip("Редактировать рецепт")
         edit_btn.setFixedSize(70, 70)
         edit_btn.clicked.connect(self.edit_recipe)
 
-        # Кнопка добавления в корзину
         add_to_cart_btn = QPushButton("🛒")
         add_to_cart_btn.setObjectName("cart_btn")
         add_to_cart_btn.setToolTip("Добавить ингредиенты в корзину")
         add_to_cart_btn.setFixedSize(70, 70)
         add_to_cart_btn.clicked.connect(self.on_add_to_cart)
 
-        # Кнопка удаления
         delete_btn = QPushButton("🗑️")
         delete_btn.setObjectName("delete_btn")
         delete_btn.setToolTip("Удалить рецепт")
         delete_btn.setFixedSize(70, 70)
         delete_btn.clicked.connect(self.delete_recipe)
 
-        # Кнопка избранного
         is_favorite = self.db.is_favorite(self.user_id, self.recipe.id)
         favorite_icon = "❤️" if is_favorite else "🤍"
         self.favorite_btn = QPushButton(favorite_icon)
@@ -1255,7 +1161,6 @@ class RecipeCardDialog(QDialog):
         self.favorite_btn.setFixedSize(70, 70)
         self.favorite_btn.clicked.connect(self.toggle_favorite)
 
-        # Кнопка отметки приготовления
         is_cooked = self.db.is_cooked(self.user_id, self.recipe.id)
         cooked_icon = "✅" if is_cooked else "⏳"
         self.cooked_btn = QPushButton(cooked_icon)
@@ -1264,7 +1169,6 @@ class RecipeCardDialog(QDialog):
         self.cooked_btn.setFixedSize(70, 70)
         self.cooked_btn.clicked.connect(self.toggle_cooked_status)
 
-        # Равномерно распределяем кнопки
         buttons_layout.addStretch()
         buttons_layout.addWidget(edit_btn)
         buttons_layout.addWidget(add_to_cart_btn)
@@ -1276,7 +1180,6 @@ class RecipeCardDialog(QDialog):
         layout.addWidget(buttons_container)
         layout.addStretch()
 
-        # Устанавливаем content_widget в scroll area
         scroll.setWidget(content_widget)
 
         # Основной layout диалога
@@ -1292,7 +1195,7 @@ class RecipeCardDialog(QDialog):
             dialog.exec()
             self.close()
         except Exception as e:
-            logger.error(f"Ошибка при открытии редактора рецепта: {e}")
+            print(f"Ошибка при открытии редактора рецепта: {e}")
 
     def delete_recipe(self):
         """Удаляет рецепт после подтверждения"""
@@ -1333,30 +1236,25 @@ class RecipeCardDialog(QDialog):
         if not numbered_steps:
             return "Инструкции отсутствуют"
 
-        return '\n\n'.join(numbered_steps)  # Двойной перенос между шагами
+        return '\n\n'.join(numbered_steps)
 
     def on_add_to_cart(self):
         """Добавляет ингредиенты рецепта в корзину"""
         try:
             ingredients = self.db.get_recipe_ingredients(self.recipe.id)
             self.add_to_cart.emit(ingredients)  # ingredients - список кортежей
-            QMessageBox.information(self, "Корзина", "Ингредиенты добавлены в корзину!")
         except Exception as e:
-            logger.error(f"Ошибка при добавлении в корзину: {e}")
             QMessageBox.critical(self, "Ошибка", "Не удалось добавить ингредиенты в корзину")
 
     def toggle_favorite(self):
         """Добавляет или убирает рецепт из избранного"""
         try:
-            # ИСПРАВЛЕНО: Используем is_recipe_favorite вместо is_favorite
             is_favorite = self.db.is_recipe_favorite(self.user_id, self.recipe.id)
 
             if is_favorite:
-                # Удаляем из избранного
                 success = self.db.toggle_favorite(self.user_id, self.recipe.id)
                 new_status = False
             else:
-                # Добавляем в избранное
                 success = self.db.toggle_favorite(self.user_id, self.recipe.id)
                 new_status = True
 
@@ -1371,14 +1269,12 @@ class RecipeCardDialog(QDialog):
                 action = "добавлен в" if new_status else "удален из"
                 QMessageBox.information(self, "Избранное",
                                         f"Рецепт '{self.recipe.name}' {action} избранное!")
-        except Exception as e:
-            logger.error(f"Ошибка при переключении избранного: {e}")
+        except Exception:
             QMessageBox.critical(self, "Ошибка", "Не удалось изменить статус избранного")
 
     def toggle_cooked_status(self):
         """Переключает статус приготовления рецепта"""
         try:
-            # ИСПРАВЛЕНО: Используем is_recipe_cooked и mark_recipe_as_cooked
             is_cooked = self.db.is_recipe_cooked(self.user_id, self.recipe.id)
             success = self.db.mark_recipe_as_cooked(self.user_id, self.recipe.id, not is_cooked)
 
@@ -1394,7 +1290,6 @@ class RecipeCardDialog(QDialog):
                 action = "отмечен как приготовленный" if new_status else "снята отметка приготовления"
                 QMessageBox.information(self, "Приготовлено",
                                         f"Рецепт '{self.recipe.name}' {action}!")
-        except Exception as e:
-            logger.error(f"Ошибка при изменении статуса приготовления: {e}")
+        except Exception:
             QMessageBox.critical(self, "Ошибка", "Не удалось изменить статус приготовления")
 
